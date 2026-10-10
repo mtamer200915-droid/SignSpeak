@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090d18" />
+  <meta name="description" content="SignSpeak — an AI-assisted sign language translation interface." />
+  <title>SignSpeak — Sign Language Translator</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#home" data-page="home" aria-label="SignSpeak home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="brand-name">Sign<span>Speak</span><small>AI SIGN TRANSLATOR</small></span>
+      </a>
+      <div class="workspace-label">WORKSPACE</div>
+      <nav class="nav-list" aria-label="Main navigation">
+        <button class="nav-link active" data-page="home"><span class="nav-icon">⌂</span>Home</button>
+        <button class="nav-link" data-page="translator"><span class="nav-icon">◉</span>Translator <span class="nav-pill">LIVE</span></button>
+        <button class="nav-link" data-page="history"><span class="nav-icon">◷</span>History</button>
+        <button class="nav-link" data-page="about"><span class="nav-icon">ⓘ</span>About SignSpeak</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="status-card"><span class="status-dot"></span><div><strong>Frontend demo</strong><small>AI model not connected</small></div></div>
+        <div class="sidebar-foot">BUILT FOR ACCESSIBILITY <span>✳</span></div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="Toggle navigation">☰</button>
+        <div class="breadcrumbs"><span>SignSpeak</span><b>/</b><strong id="pageCrumb">Home</strong></div>
+        <div class="top-actions"><span class="connection"><i></i> Demo mode</span><div class="avatar">SS</div></div>
+      </header>
+
+      <section class="page active" id="page-home">
+        <div class="hero">
+          <div class="hero-copy">
+            <div class="eyebrow"><span class="eyebrow-dot"></span> COMMUNICATION WITHOUT BARRIERS</div>
+            <h1>Every gesture<br />has a <span>voice.</span></h1>
+            <p>SignSpeak explores a more connected world by turning American Sign Language gestures into text. Start with the camera demo, then connect your team's model when it's ready.</p>
+            <div class="hero-actions"><button class="btn btn-primary" data-go="translator">Open translator <span>↗</span></button><button class="btn btn-ghost" data-go="about">Explore the project</button></div>
+            <div class="hero-metrics"><div><strong>ASL</strong><small>Language focus</small></div><div><strong>Real-time</strong><small>Target experience</small></div><div><strong>Modular</strong><small>Integration-ready UI</small></div></div>
+          </div>
+          <div class="hero-visual">
+            <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+            <div class="visual-glow"></div>
+            <div class="floating-chip chip-top"><span class="chip-spark">✦</span> Gesture recognition <b>01</b></div>
+            <div class="gesture-card">
+              <div class="gesture-top"><span><i class="live-dot"></i> CAMERA PREVIEW</span><span class="mini-dots">•••</span></div>
+              <div class="hand-illustration" aria-hidden="true"><svg viewBox="0 0 220 220" role="img"><defs><linearGradient id="handGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5b4fc"/><stop offset="1" stop-color="#38bdf8"/></linearGradient></defs><path d="M77 177 C61 162 53 146 47 130 L29 91 C25 82 29 74 36 72 C43 70 48 75 52 82 L71 116 L58 55 C56 46 61 40 68 40 C76 39 80 45 82 53 L95 104 L91 34 C91 25 97 20 104 21 C112 22 115 28 115 36 L121 101 L129 51 C131 42 137 38 144 41 C151 44 153 50 151 58 L145 111 L159 81 C163 73 170 72 176 76 C182 80 181 87 177 95 L157 142 C151 157 142 169 130 181 L126 195 L82 195 Z" fill="url(#handGrad)" opacity=".92" stroke="#dbeafe" stroke-width="2" stroke-linejoin="round"/><path d="M79 143 Q101 156 124 143" fill="none" stroke="#172554" stroke-width="3" opacity=".45"/></svg></div>
+              <div class="gesture-caption"><div><span class="tiny-label">SAMPLE GESTURE</span><strong>Ready to translate</strong></div><span class="confidence-ring">AI</span></div>
+            </div>
+            <div class="floating-chip chip-bottom"><span class="chip-wave">≈</span> Text output <b>↗</b></div>
+            <div class="visual-note"><span class="note-icon">✧</span><span><b>Designed for clarity</b><small>Accessible. Simple. Human.</small></span></div>
+          </div>
+        </div>
+        <div class="section-heading"><div><div class="eyebrow">YOUR WORKSPACE</div><h2>What would you like to do?</h2></div><span class="section-note">A demo experience, ready to grow.</span></div>
+        <div class="feature-grid">
+          <button class="feature-card" data-go="translator"><span class="feature-icon blue">◉</span><span class="feature-arrow">↗</span><h3>Translate signs</h3><p>Open the camera, preview the stream, and test the translation interface.</p><span class="feature-link">Open translator <b>→</b></span></button>
+          <button class="feature-card" data-go="history"><span class="feature-icon purple">◷</span><span class="feature-arrow">↗</span><h3>Review history</h3><p>See demo words you've added to your sentence and clear them any time.</p><span class="feature-link">View history <b>→</b></span></button>
+          <button class="feature-card" data-go="about"><span class="feature-icon cyan">✳</span><span class="feature-arrow">↗</span><h3>About the project</h3><p>Learn how the interface is structured for future backend integration.</p><span class="feature-link">Meet SignSpeak <b>→</b></span></button>
+        </div>
+        <div class="notice"><span>ⓘ</span><p><b>Demo mode is active.</b> This frontend does not recognize signs yet. Sample predictions are clearly labeled until your team's trained model is connected.</p></div>
+      </section>
+
+      <section class="page" id="page-translator">
+        <div class="page-heading"><div><div class="eyebrow">LIVE WORKSPACE</div><h1>Sign <span>Translator</span></h1><p>Use your camera preview and build a sentence. Model predictions are simulated until integration.</p></div><span class="mode-badge"><i></i> DEMO MODE</span></div>
+        <div class="translator-layout">
+          <div class="panel camera-panel">
+            <div class="panel-header"><div><span class="panel-kicker">01 / INPUT</span><h2>Camera feed</h2></div><span class="panel-status"><i></i><span id="cameraStatus">Camera off</span></span></div>
+            <div class="camera-stage" id="cameraStage">
+              <video id="cameraVideo" autoplay muted playsinline></video>
+              <div class="camera-placeholder" id="cameraPlaceholder"><div class="camera-symbol">◉</div><h3>Your camera, your hands</h3><p>Position your hands inside the frame to prepare for translation.</p><span class="camera-hint">Camera access requires your permission</span></div>
+              <div class="camera-overlay"><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span><span class="camera-tag"><i></i> LIVE PREVIEW</span></div>
+            </div>
+            <div class="camera-controls"><button class="btn btn-primary" id="startCamera">Start camera <span>↗</span></button><button class="btn btn-ghost" id="stopCamera" disabled>Stop</button><button class="icon-btn" id="flipHint" title="Camera tips" aria-label="Camera tips">?</button></div>
+            <p class="helper-text" id="cameraHelp">Your camera stream stays in this browser tab. No video is uploaded by this demo.</p>
+          </div>
+          <div class="right-stack">
+            <div class="panel prediction-panel">
+              <div class="panel-header"><div><span class="panel-kicker">02 / MODEL OUTPUT</span><h2>Prediction</h2></div><span class="sample-badge">SAMPLE</span></div>
+              <div class="prediction-content"><div class="prediction-orb">✦</div><div><span class="tiny-label">RECOGNIZED WORD</span><h3 id="predictedWord">Waiting<span>.</span></h3><p id="predictionDescription">Start the camera, then try a sample result.</p></div></div>
+              <div class="confidence-row"><span>Confidence <b id="confidenceText">—</b></span><div class="confidence-track"><span id="confidenceBar"></span></div></div>
+              <button class="btn btn-outline full-width" id="demoPrediction">Try sample prediction <span>✦</span></button>
+              <p class="sample-warning">Sample output only — not a real AI prediction.</p>
+            </div>
+            <div class="panel sentence-panel">
+              <div class="panel-header"><div><span class="panel-kicker">03 / OUTPUT</span><h2>Your sentence</h2></div><span class="word-count" id="wordCount">0 words</span></div>
+              <div class="sentence-box" id="sentenceBox"><span class="sentence-placeholder">Your recognized words will appear here…</span></div>
+              <div class="sentence-actions"><button class="btn btn-primary" id="addWord" disabled>Add word <span>＋</span></button><button class="btn btn-ghost" id="clearSentence">Clear</button><button class="icon-btn" id="copySentence" title="Copy sentence" aria-label="Copy sentence">▢</button></div>
+              <p class="helper-text" id="sentenceFeedback">Use a sample prediction to test sentence building.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-history">
+        <div class="page-heading"><div><div class="eyebrow">YOUR ACTIVITY</div><h1>Translation <span>History</span></h1><p>Words added during this browser session appear here.</p></div><button class="btn btn-ghost" id="clearHistory">Clear history</button></div>
+        <div class="history-summary"><div class="summary-card"><span class="summary-icon blue">Aa</span><div><small>WORDS ADDED</small><strong id="historyWordTotal">0</strong></div></div><div class="summary-card"><span class="summary-icon purple">≡</span><div><small>WORDS IN SENTENCE</small><strong id="historySentenceTotal">0</strong></div></div><div class="summary-card"><span class="summary-icon cyan">◷</span><div><small>SESSION</small><strong>Current tab</strong></div></div></div>
+        <div class="panel history-panel"><div class="panel-header"><div><span class="panel-kicker">RECENT ACTIVITY</span><h2>Recognized words</h2></div><span class="sample-badge">DEMO DATA ONLY</span></div><div class="history-table-wrap"><table class="history-table"><thead><tr><th>WORD</th><th>TIME</th><th>SOURCE</th><th></th></tr></thead><tbody id="historyRows"><tr><td colspan="4" class="empty-row"><span>◷</span><b>No words yet</b><small>Try a sample prediction in the Translator.</small></td></tr></tbody></table></div></div>
+        <div class="notice"><span>ⓘ</span><p>History is kept only in the current page session. It is not sent to a server or saved to a database.</p></div>
+      </section>
+
+      <section class="page" id="page-about">
+        <div class="page-heading"><div><div class="eyebrow">THE IDEA BEHIND THE INTERFACE</div><h1>About <span>SignSpeak</span></h1><p>Technology should bring people closer. SignSpeak is a student project exploring sign-language recognition.</p></div><div class="about-logo">S<span>S</span></div></div>
+        <div class="about-hero panel"><div class="about-hero-copy"><span class="panel-kicker">OUR MISSION</span><h2>Making communication<br />feel more <span>connected.</span></h2><p>SignSpeak's goal is to recognize selected American Sign Language (ASL) signs and present them as readable text. The current interface is a frontend prototype; real recognition depends on your team's model and backend.</p></div><div class="about-graphic"><div class="graphic-ring"></div><div class="graphic-core">✳</div><span class="graphic-word word-one">GESTURE</span><span class="graphic-word word-two">MEANING</span><span class="graphic-word word-three">CONNECTION</span></div></div>
+        <div class="section-heading"><div><div class="eyebrow">HOW IT WILL WORK</div><h2>Three parts. One experience.</h2></div></div>
+        <div class="steps-grid"><div class="step-card"><span>01</span><h3>Capture</h3><p>The browser asks for camera permission and shows the live video preview.</p><small>FRONTEND</small></div><div class="step-card"><span>02</span><h3>Recognize</h3><p>The backend will pass video frames or features to the trained model and return a prediction.</p><small>BACKEND + MODEL</small></div><div class="step-card"><span>03</span><h3>Communicate</h3><p>The interface can display returned words, confidence when available, and a sentence history.</p><small>FRONTEND</small></div></div>
+        <div class="panel integration-panel"><div class="integration-icon">⌘</div><div><span class="panel-kicker">INTEGRATION STATUS</span><h2>Ready for the next step</h2><p>This prototype currently has no API URL and does not send frames to a model. When your teammate confirms the backend framework, endpoint, request format, and response JSON, we'll connect the real prediction flow.</p><div class="integration-tags"><span>HTML</span><span>CSS</span><span>JavaScript</span><span>Backend pending</span><span>Model pending</span></div></div></div>
+      </section>
+
+      <footer class="app-footer"><span>© 2026 SignSpeak</span><span>Built with accessibility in mind <b>✳</b></span><span class="footer-demo"><i></i> Prototype · No model connected</span></footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
