@@ -72,6 +72,16 @@ jobs:
             cat /tmp/signova-api.log
             exit 1
           fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          health = json.loads(Path("/tmp/signova-health.json").read_text())
+          assert health.get("status") == "ok", health
+          assert health.get("model_loaded") is True, health
+          assert health.get("classes") == 166, health
+          print(f"Health check passed: {health['classes']} classes, model loaded.")
+          PY
           cat /tmp/signova-health.json
 
       - name: Submit a sample clip to the prediction endpoint
