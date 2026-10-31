@@ -11,6 +11,7 @@ on:
       - .devcontainer/start-api.sh
       - signova_features.py
       - Signova_Frontend_DarkAI/app.py
+      - Signova_Frontend_DarkAI/pose_infer.py
       - New_dataset/dataset/models_combined_166/**
   workflow_dispatch:
 
@@ -36,6 +37,7 @@ jobs:
             .devcontainer/start-api.sh
             signova_features.py
             Signova_Frontend_DarkAI/app.py
+            Signova_Frontend_DarkAI/pose_infer.py
             New_dataset/dataset/models_combined_166
             New_dataset/dataset/clean/videos/00623.mp4
           sparse-checkout-cone-mode: false

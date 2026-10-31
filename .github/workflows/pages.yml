@@ -35,12 +35,13 @@ jobs:
             predict.py
             signova_features.py
             Signova_Frontend_DarkAI/app.py
+            Signova_Frontend_DarkAI/pose_infer.py
           sparse-checkout-cone-mode: false
 
       - name: Check application syntax
         run: |
           node --check app.js
-          python3 -m py_compile SignNova_Complete.py predict.py signova_features.py Signova_Frontend_DarkAI/app.py
+          python3 -m py_compile SignNova_Complete.py predict.py signova_features.py Signova_Frontend_DarkAI/app.py Signova_Frontend_DarkAI/pose_infer.py
 
       - name: Prepare static website
         run: |

@@ -27,8 +27,6 @@ from signova_features import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-OLD_ROOT = PROJECT_ROOT / "dataset" / "dataset"
-OLD_FEATURES = OLD_ROOT / "clean" / "extracted_features_v3"
 NEW_CLEAN = PROJECT_ROOT / "New_dataset" / "dataset" / "clean"
 NEW_FEATURES = NEW_CLEAN / "clean" / "extracted_features_v3"
 JSON_PATH = NEW_CLEAN / "WLASL_selected_166.json"
@@ -70,12 +68,12 @@ def load_video_metadata() -> dict[str, tuple[str, str]]:
 
 
 def collect_feature_paths() -> dict[str, Path]:
-    # Prefer the selected 166-class dataset when a video id exists in both sets.
+    # Train only from the selected dataset so cached pose features stay on one
+    # consistent extraction pipeline. The old cache is retained as an archive.
     paths: dict[str, Path] = {}
-    for folder in (NEW_FEATURES, OLD_FEATURES):
-        if folder.is_dir():
-            for path in sorted(folder.glob("*.npy")):
-                paths.setdefault(normalize_video_id(path.stem), path)
+    if NEW_FEATURES.is_dir():
+        for path in sorted(NEW_FEATURES.glob("*.npy")):
+            paths.setdefault(normalize_video_id(path.stem), path)
     return paths
 
 
@@ -261,6 +259,15 @@ def train(epochs: int, batch_size: int, min_accuracy: float = 0.10) -> dict[str,
     validation_accuracy = float(validation_accuracy)
     test_accuracy = float(test_accuracy)
     test_balanced_accuracy = float(balanced_accuracy_score(y_test, test_predictions))
+    test_macro_f1 = float(
+        f1_score(
+            y_test,
+            test_predictions,
+            labels=test_supported_labels,
+            average="macro",
+            zero_division=0,
+        )
+    )
 
     if min(validation_accuracy, test_accuracy, test_balanced_accuracy) < min_accuracy:
         raise RuntimeError(
@@ -268,6 +275,47 @@ def train(epochs: int, batch_size: int, min_accuracy: float = 0.10) -> dict[str,
             f"Required validation, test, and balanced test accuracy >= {min_accuracy:.0%}; "
             f"got {validation_accuracy:.2%}, {test_accuracy:.2%}, "
             f"and {test_balanced_accuracy:.2%}. Add or improve labeled clips before deployment."
+        )
+
+    # A newly trained model must not replace a better checked-in bundle. Keep
+    # validation, test, balanced accuracy, and macro F1 at least at baseline.
+    # The validation split is the tuning signal; the test checks are a
+    # regression guard against the model currently served by the API.
+    baseline_metrics: dict[str, float] = {}
+    if REPORT_PATH.is_file():
+        try:
+            baseline_report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+            for key in (
+                "validation_accuracy",
+                "test_accuracy",
+                "test_balanced_accuracy",
+                "test_macro_f1",
+            ):
+                value = baseline_report.get(key)
+                if isinstance(value, (int, float)) and np.isfinite(value):
+                    baseline_metrics[key] = float(value)
+        except (OSError, json.JSONDecodeError):
+            baseline_metrics = {}
+
+    candidate_metrics = {
+        "validation_accuracy": validation_accuracy,
+        "test_accuracy": test_accuracy,
+        "test_balanced_accuracy": test_balanced_accuracy,
+        "test_macro_f1": test_macro_f1,
+    }
+    regressions = {
+        key: (value, baseline_metrics[key])
+        for key, value in candidate_metrics.items()
+        if key in baseline_metrics and value + 1e-9 < baseline_metrics[key]
+    }
+    if regressions:
+        details = ", ".join(
+            f"{key} {candidate:.2%} < current {baseline:.2%}"
+            for key, (candidate, baseline) in regressions.items()
+        )
+        raise RuntimeError(
+            "Model quality gate failed; the existing model bundle was kept. "
+            f"Candidate metrics regressed: {details}. Add or improve labeled clips before deployment."
         )
 
     # Keep the existing deployable bundle intact unless training and evaluation succeed.
@@ -308,16 +356,9 @@ def train(epochs: int, batch_size: int, min_accuracy: float = 0.10) -> dict[str,
         "test_loss": float(test_loss),
         "test_accuracy": test_accuracy,
         "test_balanced_accuracy": test_balanced_accuracy,
+        "test_macro_f1": test_macro_f1,
+        "baseline_quality_metrics": baseline_metrics,
         "minimum_accuracy_quality_gate": min_accuracy,
-        "test_macro_f1": float(
-            f1_score(
-                y_test,
-                test_predictions,
-                labels=test_supported_labels,
-                average="macro",
-                zero_division=0,
-            )
-        ),
         "test_majority_baseline_accuracy": majority_baseline,
         "chance_baseline_accuracy": 1.0 / NUM_CLASSES,
         "model_path": str(MODEL_PATH.relative_to(PROJECT_ROOT)).replace("\\", "/"),

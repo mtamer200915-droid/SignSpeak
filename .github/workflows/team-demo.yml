@@ -4,14 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       duration_minutes:
-        description: How long the temporary API should stay online
+        description: How long this shared demo session should stay online
         type: choice
         required: true
-        default: "30"
+        default: "315"
         options:
           - "15"
           - "30"
           - "60"
+          - "180"
+          - "315"
 
 permissions:
   contents: read
@@ -23,7 +25,7 @@ concurrency:
 jobs:
   team-demo:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 360
     steps:
       - name: Check out API, model, and one sample clip
         uses: actions/checkout@v4
@@ -35,6 +37,7 @@ jobs:
             .devcontainer/start-api.sh
             signova_features.py
             Signova_Frontend_DarkAI/app.py
+            Signova_Frontend_DarkAI/pose_infer.py
             New_dataset/dataset/models_combined_166
             New_dataset/dataset/clean/videos/00623.mp4
           sparse-checkout-cone-mode: false
@@ -56,8 +59,35 @@ jobs:
           TF_NUM_INTEROP_THREADS: "1"
           TF_NUM_INTRAOP_THREADS: "1"
           SIGNOVA_CORS_ORIGINS: https://mtamer200915-droid.github.io
+          SIGNOVA_DEMO_EXPIRES_AT_FILE: /tmp/signova-demo-expires-at
         run: |
-          bash .devcontainer/start-api.sh
+          cat >/tmp/signova-api-supervisor.sh <<'SH'
+          #!/usr/bin/env bash
+          set +e
+          api_pid=""
+          stop_api() {
+            touch /tmp/signova-demo-stop
+            if [ -n "$api_pid" ]; then
+              kill "$api_pid" 2>/dev/null || true
+              wait "$api_pid" 2>/dev/null || true
+            fi
+          }
+          trap stop_api TERM INT
+          while [ ! -f /tmp/signova-demo-stop ]; do
+            cd "$GITHUB_WORKSPACE"
+            python -m uvicorn Signova_Frontend_DarkAI.app:app --app-dir . --host 0.0.0.0 --port 8000 --workers 1 >>/tmp/signova-api.log 2>&1 &
+            api_pid=$!
+            wait "$api_pid"
+            status=$?
+            api_pid=""
+            if [ -f /tmp/signova-demo-stop ]; then break; fi
+            echo "API process exited with status $status; restarting it automatically in 3 seconds." >>/tmp/signova-api.log
+            sleep 3
+          done
+          SH
+          chmod +x /tmp/signova-api-supervisor.sh
+          nohup bash /tmp/signova-api-supervisor.sh >/tmp/signova-api-supervisor.log 2>&1 </dev/null &
+          echo $! >/tmp/signova-api.pid
           ready=0
           for attempt in $(seq 1 60); do
             if curl --silent --fail http://127.0.0.1:8000/health --output /tmp/signova-health.json; then
@@ -74,10 +104,13 @@ jobs:
 
       - name: Start temporary Cloudflare link and verify the public API
         shell: bash
+        env:
+          DEMO_MINUTES: ${{ inputs.duration_minutes }}
         run: |
           set -euo pipefail
           cloudflared_path="$RUNNER_TEMP/cloudflared"
           curl --fail --silent --show-error --location \
+            --retry 8 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 120 \
             https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
             --output "$cloudflared_path"
           chmod +x "$cloudflared_path"
@@ -112,6 +145,10 @@ jobs:
           print(f"Public API returned {result['word']!r} at {result['confidence']}% model score.")
           PY
 
+          expires_at=$(date -u -d "+${DEMO_MINUTES} minutes" +%s)
+          echo "$expires_at" > "$SIGNOVA_DEMO_EXPIRES_AT_FILE"
+          echo "SIGNOVA_DEMO_EXPIRES_AT=$expires_at" >> "$GITHUB_ENV"
+
           site_url="https://mtamer200915-droid.github.io/SignSpeak/?api=${api_url}"
           echo "SIGNOVA_DEMO_API_URL=${api_url}" >> "$GITHUB_ENV"
           echo "SIGNOVA_DEMO_SITE_URL=${site_url}" >> "$GITHUB_ENV"
@@ -119,20 +156,32 @@ jobs:
             echo "## Signova team demo is ready"
             echo "- [Open the website connected to the live API](${site_url})"
             echo "- API health: [${api_url}/health](${api_url}/health)"
-            echo "- This temporary demo runs for **${{ inputs.duration_minutes }} minutes** and then stops."
+            echo "- This shared demo session runs for **${DEMO_MINUTES} minutes** after its public prediction check, then stops."
+            echo "- Everyone shares this one timer and API instance; requests do not start separate timers."
             echo "- The API URL is public. Use demo clips only; do not send private recordings."
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::notice title=Signova team demo is ready::$site_url"
 
       - name: Keep the demo available for the selected time
-        env:
-          DEMO_MINUTES: ${{ inputs.duration_minutes }}
-        run: sleep "$((DEMO_MINUTES * 60))"
+        shell: bash
+        run: |
+          expires_at="${SIGNOVA_DEMO_EXPIRES_AT:-}"
+          if [ -z "$expires_at" ]; then
+            echo "The demo expiry time was not set."
+            exit 1
+          fi
+          remaining=$((expires_at - $(date +%s)))
+          if [ "$remaining" -le 0 ]; then
+            echo "The selected demo duration expired before the public API check completed."
+            exit 1
+          fi
+          sleep "$remaining"
 
       - name: Stop the temporary API and tunnel
         if: always()
         shell: bash
         run: |
+          touch /tmp/signova-demo-stop
           if [ -f /tmp/signova-cloudflared.pid ]; then
             kill "$(cat /tmp/signova-cloudflared.pid)" 2>/dev/null || true
           fi

@@ -1,0 +1,13 @@
+**
+!Dockerfile
+!requirements.txt
+!signova_features.py
+!Signova_Frontend_DarkAI/
+!Signova_Frontend_DarkAI/app.py
+!Signova_Frontend_DarkAI/pose_infer.py
+!New_dataset/
+!New_dataset/dataset/
+!New_dataset/dataset/models_combined_166/
+!New_dataset/dataset/models_combined_166/sign_language_model_166.keras
+!New_dataset/dataset/models_combined_166/class_names_166.npy
+!New_dataset/dataset/models_combined_166/training_report_166.json

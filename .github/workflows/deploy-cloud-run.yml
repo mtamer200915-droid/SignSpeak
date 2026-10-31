@@ -1,0 +1,122 @@
+name: Deploy Signova API to auto-waking Cloud Run
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: signova-cloud-run-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'me-central1' }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      SERVICE_NAME: signova-api
+      SITE_ORIGIN: https://mtamer200915-droid.github.io
+      SITE_URL: https://mtamer200915-droid.github.io/SignSpeak/
+
+    steps:
+      - name: Check out API, model, and one public smoke-test clip
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            .gcloudignore
+            Dockerfile
+            requirements.txt
+            signova_features.py
+            Signova_Frontend_DarkAI/app.py
+            Signova_Frontend_DarkAI/pose_infer.py
+            New_dataset/dataset/models_combined_166/sign_language_model_166.keras
+            New_dataset/dataset/models_combined_166/class_names_166.npy
+            New_dataset/dataset/models_combined_166/training_report_166.json
+            New_dataset/dataset/clean/videos/00623.mp4
+          sparse-checkout-cone-mode: false
+
+      - name: Check required Google Cloud settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in GCP_PROJECT_ID GCP_REGION GCP_WORKLOAD_IDENTITY_PROVIDER GCP_DEPLOY_SERVICE_ACCOUNT; do
+            if [ -z "${!name}" ]; then
+              echo "Missing $name. Follow the Cloud Run setup notes in README.md."
+              exit 1
+            fi
+          done
+
+      - name: Authenticate to Google Cloud without a stored key
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Install Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build, deploy, and configure scale-to-zero API
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run deploy "$SERVICE_NAME" \
+            --source . \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --platform managed \
+            --allow-unauthenticated \
+            --cpu 2 \
+            --memory 4Gi \
+            --min 0 \
+            --max 1 \
+            --concurrency 4 \
+            --timeout 300 \
+            --set-env-vars "SIGNOVA_CORS_ORIGINS=${SITE_ORIGIN}" \
+            --quiet
+
+      - name: Verify public API health and one prediction
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_url="$(gcloud run services describe "$SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format='value(status.url)')"
+          if [ -z "$api_url" ]; then
+            echo "Cloud Run did not return a service URL."
+            exit 1
+          fi
+          echo "api_url=$api_url" >> "$GITHUB_OUTPUT"
+
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 5 \
+            "$api_url/health" --output /tmp/signova-cloud-run-health.json
+          cat /tmp/signova-cloud-run-health.json
+
+          curl --fail --silent --show-error --max-time 300 \
+            --form "file=@New_dataset/dataset/clean/videos/00623.mp4" \
+            "$api_url/api/predict" --output /tmp/signova-cloud-run-prediction.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          health = json.loads(Path("/tmp/signova-cloud-run-health.json").read_text())
+          prediction = json.loads(Path("/tmp/signova-cloud-run-prediction.json").read_text())
+          assert health.get("status") == "ok" and health.get("model_loaded") is True
+          assert isinstance(prediction.get("word"), str) and prediction["word"].strip()
+          print(f"Prediction path works: {prediction['word']} ({prediction['confidence']}% model score).")
+          PY
+
+          site_url="${SITE_URL}?api=${api_url}"
+          {
+            echo "## Signova API is deployed"
+            echo "- [Open Signova with its stable API connection](${site_url})"
+            echo "- [API health](${api_url}/health)"
+            echo "- The API starts automatically when requested and scales to zero after inactivity."
+            echo "- The team shares one API service; model inference is serialized and each instance accepts up to four requests."
+            echo "- The API is public. Use demo clips only; do not submit private recordings."
+          } >> "$GITHUB_STEP_SUMMARY"

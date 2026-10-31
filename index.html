@@ -24,7 +24,7 @@
         <button class="nav-link" data-page="about"><span class="nav-icon">ⓘ</span>About Signova</button>
       </nav>
       <div class="sidebar-bottom">
-        <div class="status-card"><span class="status-dot"></span><div><strong>Signova translator</strong><small>API connection required</small></div></div>
+        <div class="status-card"><span class="status-dot"></span><div><strong>Signova translator</strong><small id="sidebarApiStatus">Checking API connection…</small></div></div>
         <div class="sidebar-foot">BUILT FOR ACCESSIBILITY <span>✳</span></div>
       </div>
     </aside>
@@ -33,7 +33,7 @@
       <header class="topbar">
         <button class="mobile-menu" id="mobileMenu" aria-label="Toggle navigation">☰</button>
         <div class="breadcrumbs"><span>Signova</span><b>/</b><strong id="pageCrumb">Home</strong></div>
-        <div class="top-actions"><span class="connection"><i></i> Signova API</span><div class="avatar">SO</div></div>
+        <div class="top-actions"><button class="language-toggle" id="languageToggle" type="button" aria-label="Switch to Arabic" title="Switch to Arabic">Arabic</button><span class="connection"><i></i> Signova API</span><div class="avatar">SO</div></div>
       </header>
 
       <section class="page active" id="page-home">
@@ -69,6 +69,7 @@
 
       <section class="page" id="page-translator">
         <div class="page-heading"><div><div class="eyebrow">CAMERA TRANSLATION</div><h1>Sign <span>Translator</span></h1><p>Record one sign, check its prediction, then press Done to add it and continue with the next word.</p></div><span class="mode-badge"><i></i> SIGNOVA API</span></div>
+        <div class="api-expiry-notice" id="apiExpiryNotice" role="status" aria-live="polite" hidden><span aria-hidden="true">ⓘ</span><p id="apiExpiryMessage"></p></div>
         <div class="translator-layout">
           <div class="panel camera-panel">
             <div class="panel-header"><div><span class="panel-kicker">01 / INPUT</span><h2>Camera feed</h2></div><span class="panel-status"><i></i><span id="cameraStatus">Camera off</span></span></div>
@@ -82,14 +83,15 @@
               </div>
             </div>
             <div class="camera-controls"><button class="btn btn-primary" id="startCamera">Start camera <span>↗</span></button><button class="btn btn-primary" id="startSign" disabled>Start sign <span>●</span></button><button class="btn btn-ghost" id="stopCamera" disabled>Stop &amp; predict</button><button class="btn btn-ghost" id="flipCamera" disabled title="Switch between the front and rear cameras">Flip camera <span>↻</span></button><button class="btn btn-ghost" id="cameraOff" disabled>Camera off</button><button class="icon-btn" id="flipHint" title="Camera tips" aria-label="Camera tips">?</button></div>
-            <p class="helper-text" id="cameraHelp">Start the camera first. The local framing guide checks that your face and shoulders are visible before you record.</p>
-            <p class="api-help">Predictions need a separate API that runs temporarily for team testing. <a href="https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo.yml" target="_blank" rel="noopener noreferrer">Open the free API demo controls</a>; share the website link from the run summary.</p>
+            <p class="helper-text" id="cameraHelp">Start the camera first. The local framing guide checks that your face and shoulders are visible before you record. Perform the sign yourself in front of the camera; showing a video on another screen may not be recognized.</p>
+            <p class="api-help">The GitHub Actions API demo is temporary. Use the connected website link from the run summary while the demo is running.</p>
           </div>
           <div class="right-stack">
             <div class="panel prediction-panel">
               <div class="panel-header"><div><span class="panel-kicker">02 / MODEL OUTPUT</span><h2>Prediction</h2></div><span class="sample-badge">MODEL RESULT</span></div>
-              <div class="prediction-content"><div class="prediction-orb">✦</div><div><span class="tiny-label">RECOGNIZED WORD</span><h3 id="predictedWord">Waiting<span>.</span></h3><p id="predictionDescription">Record a sign or upload a video to get a prediction.</p></div></div>
-              <div class="confidence-row"><span>Model score <b id="confidenceText">—</b></span><div class="confidence-track"><span id="confidenceBar"></span></div></div>
+              <div class="prediction-content"><div class="prediction-orb">✦</div><div><span class="tiny-label">RECOGNIZED WORD</span><h3 id="predictedWord" data-no-translate>Waiting<span>.</span></h3><p id="predictionDescription">Record a sign or upload a video to get a prediction.</p></div></div>
+              <div class="confidence-row"><div class="confidence-label"><span id="confidenceLabel">Local model score</span><b id="confidenceText">—</b></div><div class="confidence-track"><span id="confidenceBar"></span></div></div>
+              <div class="prediction-suggestions" id="predictionSuggestions" role="group" aria-label="Model options" hidden><span>Model options · choose the word you performed</span><div class="suggestion-list"></div></div>
               <button class="btn btn-outline full-width" id="demoPrediction">Upload sign video <span>✦</span></button>
               <p class="sample-warning">Experimental model score, not a guarantee. Verify each word before adding it.</p>
             </div>
@@ -112,13 +114,13 @@
 
       <section class="page" id="page-about">
         <div class="page-heading"><div><div class="eyebrow">THE IDEA BEHIND THE INTERFACE</div><h1>About <span>Signova</span></h1><p>Technology should bring people closer. Signova is a student project exploring sign-language recognition.</p></div><div class="about-logo">S<span>O</span></div></div>
-        <div class="about-hero panel"><div class="about-hero-copy"><span class="panel-kicker">OUR MISSION</span><h2>Making communication<br />feel more <span>connected.</span></h2><p>Signova's goal is to recognize selected American Sign Language (ASL) signs and present them as readable text. The frontend sends short clips to the Signova API; Gemini verification is optional.</p></div><div class="about-graphic"><div class="graphic-ring"></div><div class="graphic-core">✳</div><span class="graphic-word word-one">GESTURE</span><span class="graphic-word word-two">MEANING</span><span class="graphic-word word-three">CONNECTION</span></div></div>
+        <div class="about-hero panel"><div class="about-hero-copy"><span class="panel-kicker">OUR MISSION</span><h2>Making communication<br />feel more <span>connected.</span></h2><p>Signova's goal is to recognize selected American Sign Language (ASL) signs and present them as readable text. The frontend sends short clips to the Signova API; Gemini's optional second opinion is limited to the project's 166 labels.</p></div><div class="about-graphic"><div class="graphic-ring"></div><div class="graphic-core">✳</div><span class="graphic-word word-one">GESTURE</span><span class="graphic-word word-two">MEANING</span><span class="graphic-word word-three">CONNECTION</span></div></div>
         <div class="section-heading"><div><div class="eyebrow">HOW IT WORKS</div><h2>Three parts. One experience.</h2></div></div>
-        <div class="steps-grid"><div class="step-card"><span>01</span><h3>Capture</h3><p>The browser asks for camera permission and shows the live video preview.</p><small>FRONTEND</small></div><div class="step-card"><span>02</span><h3>Recognize</h3><p>The backend extracts pose landmarks and runs the trained 166-class model; Gemini video verification is optional.</p><small>BACKEND + MODEL</small></div><div class="step-card"><span>03</span><h3>Communicate</h3><p>The interface displays the returned word and confidence and keeps a session-only sentence history.</p><small>FRONTEND</small></div></div>
-        <div class="panel integration-panel"><div class="integration-icon">⌘</div><div><span class="panel-kicker">INTEGRATION STATUS</span><h2>Signova API connection</h2><p>GitHub Pages hosts the website; word prediction needs the separate model API to be running. Start the free temporary team demo from <a href="https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo.yml" target="_blank" rel="noopener noreferrer">GitHub Actions</a>, then share the website link from its run summary. The camera framing guide runs in your browser; recorded clips are sent to the prediction API only after you stop recording.</p><div class="integration-tags"><span id="apiStatus" class="api-health" role="status" aria-live="polite">Checking model connection…</span><span>HTML</span><span>CSS</span><span>JavaScript</span><span>HTTPS API</span><span>166-class model</span></div></div></div>
+        <div class="steps-grid"><div class="step-card"><span>01</span><h3>Capture</h3><p>The browser asks for camera permission and shows the live video preview.</p><small>FRONTEND</small></div><div class="step-card"><span>02</span><h3>Recognize</h3><p>The backend extracts pose landmarks and runs the trained 166-class model; Gemini's optional second opinion can choose only from those labels.</p><small>BACKEND + MODEL</small></div><div class="step-card"><span>03</span><h3>Communicate</h3><p>The interface displays the returned word and confidence and keeps a session-only sentence history.</p><small>FRONTEND</small></div></div>
+        <div class="panel integration-panel"><div class="integration-icon">⌘</div><div><span class="panel-kicker">INTEGRATION STATUS</span><h2>Signova API connection</h2><p>GitHub Pages hosts the website. For automatic wake-up and a stable address, deploy the API once to Cloud Run using the repository workflow; it starts when a request arrives and scales down after inactivity. The temporary <a href="https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo.yml" target="_blank" rel="noopener noreferrer">GitHub Actions demo</a> remains available for short tests. The camera framing guide runs in your browser; recorded clips are sent to the prediction API only after you stop recording.</p><div class="integration-tags"><span id="apiStatus" class="api-health" role="status" aria-live="polite">Checking model connection…</span><span>HTML</span><span>CSS</span><span>JavaScript</span><span>HTTPS API</span><span>166-class model</span></div></div></div>
       </section>
 
-      <footer class="app-footer"><span>© 2026 Signova</span><span>Built with accessibility in mind <b>✳</b></span><span class="footer-demo"><i></i> Experimental · Connected API required</span></footer>
+  <footer class="app-footer"><span>© 2026 Signova</span><span>Built with accessibility in mind <b>✳</b></span><span class="footer-demo"><i></i> Experimental · API status shown above</span></footer>
     </main>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

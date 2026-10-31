@@ -9,7 +9,6 @@ on:
       - signova_features.py
       - New_dataset/dataset/clean/WLASL_selected_166.json
       - New_dataset/dataset/clean/clean/extracted_features_v3/**
-      - dataset/dataset/clean/extracted_features_v3/**
   workflow_dispatch:
 
 permissions:
@@ -33,7 +32,6 @@ jobs:
             signova_features.py
             New_dataset/dataset/clean/WLASL_selected_166.json
             New_dataset/dataset/clean/clean/extracted_features_v3
-            dataset/dataset/clean/extracted_features_v3
             New_dataset/dataset/models_combined_166/class_names_166.npy
             New_dataset/dataset/models_combined_166/sign_language_model_166.keras
             New_dataset/dataset/models_combined_166/training_report_166.json
