@@ -1,0 +1,21 @@
+{
+  "name": "Signova API",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start-api.sh",
+  "containerEnv": {
+    "CUDA_VISIBLE_DEVICES": "",
+    "OMP_NUM_THREADS": "1",
+    "TF_ENABLE_ONEDNN_OPTS": "0",
+    "TF_NUM_INTEROP_THREADS": "1",
+    "TF_NUM_INTRAOP_THREADS": "1",
+    "SIGNOVA_CORS_ORIGINS": "https://mtamer200915-droid.github.io"
+  },
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": {
+      "label": "Signova prediction API",
+      "onAutoForward": "notify"
+    }
+  }
+}

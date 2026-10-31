@@ -69,15 +69,21 @@ The browser requires localhost or HTTPS for camera permission. The local develop
 
 The workflow in `.github/workflows/pages.yml` publishes only `index.html`, `style.css`, and `app.js`; it does not publish the video datasets or model files. On the repository's first Pages deployment, open **Settings → Pages** and select **GitHub Actions** as the publishing source. After the workflow succeeds, GitHub displays the team website URL in the deployment details. This repository's expected URL is `https://mtamer200915-droid.github.io/SignSpeak/`.
 
-GitHub Pages serves the website files only. It cannot run this Python API, and `127.0.0.1` on a teammate's browser points to that teammate's own device. For a temporary no-cost team demo, start the API on a computer with a working Python environment and the checked-in model bundle; the first API start downloads the YOLO pose weights. Then expose port 8000 with a Cloudflare Quick Tunnel. Set the API's `SIGNOVA_CORS_ORIGINS` to `https://mtamer200915-droid.github.io` and open the team site with the tunnel address, for example:
+GitHub Pages serves the website files only. It cannot run this Python API, and `127.0.0.1` on a teammate's browser points to that teammate's own device. The repository now includes a GitHub Codespaces setup for temporary remote team testing, so the API does not have to run on your Windows computer:
+
+1. On GitHub, open this repository, choose **Code → Codespaces → Create codespace on main**, and wait for setup to finish. The setup installs the CPU-only dependencies and starts the API on port 8000; the first start downloads the YOLO pose weights.
+2. In the Codespaces **Ports** panel, make port 8000 public and copy its HTTPS address. Anyone with the public address can reach this test API.
+3. Open the website with that API address appended, like this:
 
 ```text
-https://mtamer200915-droid.github.io/SignSpeak/?api=https://example.trycloudflare.com
+https://mtamer200915-droid.github.io/SignSpeak/?api=https://YOUR-CODESPACE-8000.app.github.dev
 ```
 
-Replace the example with the HTTPS address printed by `cloudflared tunnel --url http://127.0.0.1:8000`. The tunnel address changes each time, the API stops when the host computer or tunnel stops, and anyone who gets the address can submit videos. Do not use it for private recordings. A Quick Tunnel is for short demos, not an always-on service.
+Codespaces includes a monthly free quota for personal GitHub accounts (currently 120 hours on a 2-core machine and 15 GB-month storage for GitHub Free). The Codespace stops when idle or when you stop it, so the API is not always online; after restarting, check that port 8000 is public again. Usage beyond the free quota is blocked if there is no payment method on the account. The public API URL is not protected by login, so use it only for demo clips and stop the Codespace after testing.
 
-The latest trained model still produces experimental results at 15.42% test accuracy. The API has not yet been smoke-tested end to end in a deployed environment; a local Windows application-control policy prevents TensorFlow from loading here. A computer that can run the API and download YOLO weights is still required for live camera predictions.
+The API smoke check has passed in GitHub's Linux runner, but this Codespaces deployment still needs to be started from the repository owner's GitHub account. The Windows application-control policy on the development computer blocks TensorFlow, which is why the model could not be run locally here. This hosting setup makes the app reachable to teammates; it does not improve model accuracy. The current 15.42% test accuracy is experimental and too low for dependable communication.
+
+If another computer can run the API, a Cloudflare Quick Tunnel is an alternative temporary route. Set `SIGNOVA_CORS_ORIGINS` to `https://mtamer200915-droid.github.io`, expose port 8000 with `cloudflared tunnel --url http://127.0.0.1:8000`, and replace the example API address above with the HTTPS tunnel URL. Quick Tunnel links change and stop working when the tunnel process stops.
 
 The API limits videos to 50 MB by default (`SIGNOVA_MAX_UPLOAD_BYTES` can change this). Gemini verification sends the uploaded clip to Google when `GEMINI_API_KEY` is configured; without the key, only the local prediction is used.
 
