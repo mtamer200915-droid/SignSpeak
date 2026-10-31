@@ -47,11 +47,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "numpy>=1.26,<2.2" "scikit-learn>=1.4,<2" "tensorflow>=2.16,<2.22"
 
-      - name: Train and evaluate on official WLASL splits
+      - name: Train and evaluate candidate on official WLASL splits
         env:
           TF_CPP_MIN_LOG_LEVEL: "2"
           OMP_NUM_THREADS: "4"
-        run: python SignNova_Complete.py --epochs 100 --batch-size 16 --min-accuracy 0.10
+        run: python SignNova_Complete.py --epochs 100 --batch-size 16 --min-accuracy 0.10 --report-quality-gate-rejection
 
       - name: Save the validated model to the repository
         run: |

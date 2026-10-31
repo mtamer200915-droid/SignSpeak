@@ -38,6 +38,10 @@ NUM_CLASSES = 166
 SEED = 42
 
 
+class ModelQualityGateRejected(RuntimeError):
+    """Raised when training finishes but the candidate must not replace the model."""
+
+
 def normalize_video_id(value: object) -> str:
     text = str(value).strip()
     return str(int(text)) if text.isdigit() else text
@@ -270,7 +274,7 @@ def train(epochs: int, batch_size: int, min_accuracy: float = 0.10) -> dict[str,
     )
 
     if min(validation_accuracy, test_accuracy, test_balanced_accuracy) < min_accuracy:
-        raise RuntimeError(
+        raise ModelQualityGateRejected(
             "Model quality gate failed; no model files were changed. "
             f"Required validation, test, and balanced test accuracy >= {min_accuracy:.0%}; "
             f"got {validation_accuracy:.2%}, {test_accuracy:.2%}, "
@@ -313,7 +317,7 @@ def train(epochs: int, batch_size: int, min_accuracy: float = 0.10) -> dict[str,
             f"{key} {candidate:.2%} < current {baseline:.2%}"
             for key, (candidate, baseline) in regressions.items()
         )
-        raise RuntimeError(
+        raise ModelQualityGateRejected(
             "Model quality gate failed; the existing model bundle was kept. "
             f"Candidate metrics regressed: {details}. Add or improve labeled clips before deployment."
         )
@@ -389,12 +393,34 @@ def main() -> None:
         default=0.10,
         help="Minimum validation, test, and balanced test accuracy required to replace the saved model (default: 0.10).",
     )
+    parser.add_argument(
+        "--report-quality-gate-rejection",
+        action="store_true",
+        help="In automation, report a rejected candidate as a warning while keeping the current model unchanged.",
+    )
     args = parser.parse_args()
     if args.epochs < 1 or args.batch_size < 1:
         parser.error("--epochs and --batch-size must be positive integers")
     if not 0.0 < args.min_accuracy <= 1.0:
         parser.error("--min-accuracy must be greater than 0 and at most 1.0")
-    train(args.epochs, args.batch_size, args.min_accuracy)
+    try:
+        train(args.epochs, args.batch_size, args.min_accuracy)
+    except ModelQualityGateRejected as exc:
+        if not args.report_quality_gate_rejection:
+            raise
+
+        message = str(exc)
+        print(f"::warning title=Model candidate rejected::{message}")
+        summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary_path:
+            with open(summary_path, "a", encoding="utf-8") as summary:
+                summary.write(
+                    "## Training completed; candidate not promoted\n\n"
+                    "The run completed training and evaluation, but the candidate did not pass the quality gate. "
+                    "The existing model, class map, and report were kept unchanged.\n\n"
+                    f"**Reason:** {message}\n"
+                )
+        print("The current model bundle was preserved.")
 
 
 if __name__ == "__main__":
