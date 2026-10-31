@@ -56,20 +56,18 @@ MODELS_DIR = NEW_ROOT / "models_combined_166"
 MODEL_PATH = MODELS_DIR / "sign_language_model_166.keras"
 CLASS_PATH = MODELS_DIR / "class_names_166.npy"
 REPORT_PATH = MODELS_DIR / "training_report_166.json"
-POSE_WEIGHTS = Path(os.getenv(
-    "YOLO_POSE_WEIGHTS",
-    str(PROJECT_ROOT / "dataset" / "dataset" / "models" / "yolov8n-pose.pt"),
-))
+POSE_WEIGHTS_OVERRIDE = os.getenv("YOLO_POSE_WEIGHTS")
+POSE_WEIGHTS = Path(POSE_WEIGHTS_OVERRIDE) if POSE_WEIGHTS_OVERRIDE else Path("yolov8n-pose.pt")
 
 MAX_UPLOAD_BYTES = int(os.getenv("SIGNOVA_MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))
 
 print("⏳ جاري تحميل نموذج الذكاء الاصطناعي المحلي وأوزان الاستخراج...")
 if not MODEL_PATH.exists() or not CLASS_PATH.exists() or not REPORT_PATH.exists():
     raise FileNotFoundError("ملفات النموذج أو التصنيفات أو تقرير التدريب غير موجودة!")
-if not POSE_WEIGHTS.is_file():
+if POSE_WEIGHTS_OVERRIDE and not POSE_WEIGHTS.is_file():
     raise FileNotFoundError(
         f"YOLO pose weights not found: {POSE_WEIGHTS}. "
-        "Set YOLO_POSE_WEIGHTS to a valid yolov8n-pose.pt file."
+        "Set YOLO_POSE_WEIGHTS to a valid local pose-weights file or clear it to use the official auto-download."
     )
 
 model = tf.keras.models.load_model(MODEL_PATH)
@@ -92,7 +90,7 @@ if tuple(model.input_shape[1:]) != (FRAMES, MODEL_DIM):
     raise ValueError(
         f"Model expects {model.input_shape}; preprocessing produces ({FRAMES}, {MODEL_DIM})."
     )
-pose_model = YOLO(str(POSE_WEIGHTS))
+pose_model = YOLO(str(POSE_WEIGHTS) if POSE_WEIGHTS_OVERRIDE else "yolov8n-pose.pt")
 print("✅ النظام المحلي يعمل بكفاءة وجاهز!")
 
 
@@ -102,7 +100,7 @@ async def health():
         "status": "ok",
         "model_loaded": True,
         "classes": len(classes),
-        "pose_weights": POSE_WEIGHTS.name,
+        "pose_weights": POSE_WEIGHTS.name if POSE_WEIGHTS_OVERRIDE else "yolov8n-pose.pt",
         "gemini_enabled": client is not None,
     }
 

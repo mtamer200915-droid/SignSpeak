@@ -1,0 +1,93 @@
+name: Smoke test Signova prediction API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/api-smoke.yml
+      - requirements.txt
+      - signova_features.py
+      - Signova_Frontend_DarkAI/app.py
+      - New_dataset/dataset/models_combined_166/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signova-api-smoke
+  cancel-in-progress: true
+
+jobs:
+  api-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out API, model, and one sample clip
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            requirements.txt
+            signova_features.py
+            Signova_Frontend_DarkAI/app.py
+            New_dataset/dataset/models_combined_166
+            New_dataset/dataset/clean/videos/00623.mp4
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install API dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Start API and wait for readiness
+        shell: bash
+        run: |
+          cd Signova_Frontend_DarkAI
+          python -m uvicorn app:app --host 127.0.0.1 --port 8000 > ../signova-api.log 2>&1 &
+          echo $! > /tmp/signova-api.pid
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:8000/health --output /tmp/signova-health.json; then
+              ready=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat ../signova-api.log
+            exit 1
+          fi
+          cat /tmp/signova-health.json
+
+      - name: Submit a sample clip to the prediction endpoint
+        shell: bash
+        run: |
+          curl --silent --show-error --fail \
+            --form "file=@New_dataset/dataset/clean/videos/00623.mp4" \
+            http://127.0.0.1:8000/api/predict \
+            --output /tmp/signova-prediction.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path("/tmp/signova-prediction.json").read_text())
+          assert isinstance(result.get("word"), str) and result["word"].strip()
+          assert 0 <= result.get("confidence", -1) <= 100
+          print(f"Prediction endpoint returned {result['word']!r} at {result['confidence']}% confidence.")
+          PY
+
+      - name: Show API startup log if the job fails
+        if: failure()
+        run: cat signova-api.log || true
+
+      - name: Stop the API process
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/signova-api.pid ]; then
+            kill "$(cat /tmp/signova-api.pid)" 2>/dev/null || true
+          fi

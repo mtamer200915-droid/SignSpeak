@@ -22,7 +22,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-The API also needs Ultralytics pose weights named `yolov8n-pose.pt`; this file is not included. Set `YOLO_POSE_WEIGHTS` to its full path before starting the API. Gemini verification is optional. Set `GEMINI_API_KEY` only if you want uploaded clips to be sent to Gemini for a second opinion.
+On first API startup, Ultralytics downloads its official `yolov8n-pose.pt` pose weights if they are not already available; the host needs internet access for that first run. To use an existing local file instead, set `YOLO_POSE_WEIGHTS` to its full path. Gemini verification is optional. Set `GEMINI_API_KEY` only if you want uploaded clips to be sent to Gemini for a second opinion.
 
 ## Train and evaluate
 
@@ -34,13 +34,13 @@ python SignNova_Complete.py
 
 The run requires all 166 classes and at least two usable training clips per class. It writes the model, class-name mapping, and `training_report_166.json` only after training and held-out evaluation succeed. The supplied test partition contains 138 of the 166 classes, so its results do not measure the other 28 words. Review test accuracy, balanced accuracy, macro F1, class support, and the majority-class baseline in the report; a high training score alone is not evidence of useful recognition.
 
-The report currently checked into this repository is from an older run. It reports about 0.50% test accuracy, and its class-name list does not match the `class_names_166.npy` file beside the saved model. Treat the existing model bundle as unverified until a fresh training run completes. No accuracy is promised for the current artifacts.
+The current checked-in bundle was retrained on GitHub Actions from the official WLASL splits for 49 epochs. It reports 15.42% test accuracy, 16.30% balanced test accuracy, and 13.78% macro F1 on 201 test videos covering 138 of 166 classes; the majority-class baseline is 1.49%. The model and class map now match. This is a substantial improvement over the previous 0.50% result, but it is still experimental and far below accuracy suitable for dependable communication.
 
 Training now keeps the existing model files unless validation accuracy, test accuracy, and balanced test accuracy each reach at least 10%. This is a minimum quality gate to reject near-random models, not a claim that 10% is good enough for real communication. `--min-accuracy` can raise the gate; it should not be lowered to force a weak model into use.
 
 The public repository also has a Linux GitHub Actions training workflow. It runs when the training code or tracked feature data changes, and commits the model, class mapping, and report only when the quality gate passes. It can also be started from the Actions tab. Standard GitHub-hosted runners are free for public repositories; this does not keep the prediction API online.
 
-The API checks that the model, class-name file, and training report use the same preprocessing and class order. It will refuse to start with the current stale bundle; complete a fresh training run before testing camera predictions.
+The API checks that the model, class-name file, and training report use the same preprocessing and class order. The saved bundle passes those metadata checks. The local Windows environment still blocks TensorFlow imports under its application-control policy, so a full live camera session has not been verified on this computer.
 
 ## Run the camera workflow locally
 
@@ -66,7 +66,7 @@ The browser requires localhost or HTTPS for camera permission. The local develop
 
 The workflow in `.github/workflows/pages.yml` publishes only `index.html`, `style.css`, and `app.js`; it does not publish the video datasets or model files. On the repository's first Pages deployment, open **Settings → Pages** and select **GitHub Actions** as the publishing source. After the workflow succeeds, GitHub displays the team website URL in the deployment details. This repository's expected URL is `https://mtamer200915-droid.github.io/SignSpeak/`.
 
-GitHub Pages serves the website files only. It cannot run this Python API, and `127.0.0.1` on a teammate's browser points to that teammate's own device. For a temporary no-cost team demo, start the API on a computer that has a working Python environment, a freshly trained model bundle, and `yolov8n-pose.pt`; then expose port 8000 with a Cloudflare Quick Tunnel. Set the API's `SIGNOVA_CORS_ORIGINS` to `https://mtamer200915-droid.github.io` and open the team site with the tunnel address, for example:
+GitHub Pages serves the website files only. It cannot run this Python API, and `127.0.0.1` on a teammate's browser points to that teammate's own device. For a temporary no-cost team demo, start the API on a computer with a working Python environment and the checked-in model bundle; the first API start downloads the YOLO pose weights. Then expose port 8000 with a Cloudflare Quick Tunnel. Set the API's `SIGNOVA_CORS_ORIGINS` to `https://mtamer200915-droid.github.io` and open the team site with the tunnel address, for example:
 
 ```text
 https://mtamer200915-droid.github.io/SignSpeak/?api=https://example.trycloudflare.com
@@ -74,7 +74,7 @@ https://mtamer200915-droid.github.io/SignSpeak/?api=https://example.trycloudflar
 
 Replace the example with the HTTPS address printed by `cloudflared tunnel --url http://127.0.0.1:8000`. The tunnel address changes each time, the API stops when the host computer or tunnel stops, and anyone who gets the address can submit videos. Do not use it for private recordings. A Quick Tunnel is for short demos, not an always-on service.
 
-The current saved classifier is not ready for live predictions: its last report records about 0.50% test accuracy, and the API rejects the stale model/class mapping. The local Windows setup used for this review also cannot load TensorFlow because of an operating-system application-control policy, and the YOLO pose weights are absent. Retrain and validate the model on a compatible computer and provide the pose weights before expecting `/health` to report a ready model. The API does not return trustworthy predictions until those steps succeed.
+The latest trained model still produces experimental results at 15.42% test accuracy. The API has not yet been smoke-tested end to end in a deployed environment; a local Windows application-control policy prevents TensorFlow from loading here. A computer that can run the API and download YOLO weights is still required for live camera predictions.
 
 The API limits videos to 50 MB by default (`SIGNOVA_MAX_UPLOAD_BYTES` can change this). Gemini verification sends the uploaded clip to Google when `GEMINI_API_KEY` is configured; without the key, only the local prediction is used.
 
