@@ -1,11 +1,19 @@
 """Signova - Real-World Inference Script for 166-Classes Model."""
 from pathlib import Path
 import argparse
+import json
 import os
 import numpy as np
 import cv2
 from ultralytics import YOLO
 import tensorflow as tf
+from signova_features import (
+    FRAMES,
+    MODEL_DIM,
+    POSE_DIM,
+    PREPROCESSING_VERSION,
+    enhance_pose_sequence,
+)
 
 # ---- المسارات الأساسية للنموذج والملفات المدربة ----
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -13,20 +21,36 @@ NEW_ROOT = PROJECT_ROOT / "New_dataset" / "dataset"
 MODELS_DIR = NEW_ROOT / "models_combined_166"
 MODEL_PATH = MODELS_DIR / "sign_language_model_166.keras"
 CLASS_PATH = MODELS_DIR / "class_names_166.npy"
+REPORT_PATH = MODELS_DIR / "training_report_166.json"
 POSE_WEIGHTS = Path(os.environ.get(
     "YOLO_POSE_WEIGHTS",
     str(PROJECT_ROOT / "dataset" / "dataset" / "models" / "yolov8n-pose.pt"),
 ))
 
-FRAMES, DIM = 30, 34
 DEVICE = "cpu" # ضعها "cuda" لو كارت الشاشة شغال معاك في الاستخراج
 
 
 def load_inference_model():
-    if not MODEL_PATH.exists() or not CLASS_PATH.exists():
-        raise FileNotFoundError("لم يتم العثور على ملفات النموذج أو الكلاسات المحفوظة!")
+    if not MODEL_PATH.exists() or not CLASS_PATH.exists() or not REPORT_PATH.exists():
+        raise FileNotFoundError("لم يتم العثور على ملفات النموذج أو الكلاسات أو تقرير التدريب!")
     model = tf.keras.models.load_model(MODEL_PATH)
-    classes = np.load(CLASS_PATH, allow_pickle=True)
+    classes = np.load(CLASS_PATH, allow_pickle=False)
+    report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+    if report.get("preprocessing") != PREPROCESSING_VERSION:
+        raise RuntimeError(
+            "Saved model preprocessing is outdated. Run SignNova_Complete.py successfully before inference."
+        )
+    if report.get("class_names") != classes.tolist():
+        raise RuntimeError("Saved model class names do not match the training report; retrain the model bundle.")
+    if model.output_shape[-1] != len(classes):
+        raise ValueError(
+            f"Model outputs {model.output_shape[-1]} classes, but the class file has {len(classes)}."
+        )
+    if tuple(model.input_shape[1:]) != (FRAMES, MODEL_DIM):
+        raise ValueError(
+            f"Model expects {model.input_shape}; inference preprocessing produces "
+            f"({FRAMES}, {MODEL_DIM})."
+        )
     return model, classes
 
 
@@ -46,7 +70,7 @@ def extract_video_features(video_path, pose_model):
             break
         if idx in wanted:
             h, w = frame.shape[:2]
-            vec = np.zeros(DIM, dtype=np.float32)
+            vec = np.zeros(POSE_DIM, dtype=np.float32)
             result = pose_model.predict(frame, device=DEVICE, verbose=False)
             if result and result[0].keypoints is not None:
                 xy = result[0].keypoints.xy
@@ -59,9 +83,9 @@ def extract_video_features(video_path, pose_model):
                     coords = xy[person].cpu().numpy().astype(np.float32)
                     coords[:, 0] /= max(w, 1)
                     coords[:, 1] /= max(h, 1)
-                    vec = coords.reshape(-1)[:DIM]
-                    if vec.size < DIM:
-                        vec = np.pad(vec, (0, DIM-vec.size))
+                    vec = coords.reshape(-1)[:POSE_DIM]
+                    if vec.size < POSE_DIM:
+                        vec = np.pad(vec, (0, POSE_DIM-vec.size))
             frames.append(vec)
         idx += 1
     cap.release()
@@ -71,19 +95,8 @@ def extract_video_features(video_path, pose_model):
 
     arr = np.asarray(frames, dtype=np.float32)
     if len(arr) < FRAMES:
-        arr = np.vstack([arr, np.zeros((FRAMES-len(arr), DIM), np.float32)])
+        arr = np.vstack([arr, np.zeros((FRAMES-len(arr), POSE_DIM), np.float32)])
     return arr[:FRAMES]
-
-
-def enhance(seq):
-    normalized = np.zeros_like(seq, dtype=np.float32)
-    for t in range(seq.shape[0]):
-        frame = seq[t].reshape(-1, 2)
-        pts = frame[np.any(frame != 0, axis=1)]
-        normalized[t] = (frame - pts.mean(axis=0)).flatten() if len(pts) else seq[t]
-    vel = np.vstack([np.zeros((1, normalized.shape[1]), np.float32),
-                     np.abs(np.diff(normalized, axis=0))])
-    return np.concatenate([normalized, vel], axis=-1).astype(np.float32)
 
 
 def predict_sign(video_path):
@@ -99,7 +112,7 @@ def predict_sign(video_path):
         print("❌ خطأ: لم يتم قراءة أو استخراج المعالم من الفيديو بنجاح.")
         return
 
-    enhanced = enhance(raw_seq)
+    enhanced = enhance_pose_sequence(raw_seq)
     X_input = np.expand_dims(enhanced, axis=0) # شكل المدخلات المناسب للنموذج (1, 30, 68)
 
     print("🧠 جاري التنبؤ بالإشارة...")

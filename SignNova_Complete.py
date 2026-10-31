@@ -1,186 +1,337 @@
-"""Signova - Full 166 Classes Training Pipeline (Combining Old & New Datasets)."""
-from pathlib import Path
+"""Reproducible training pipeline for Signova's 166-class landmark model."""
+
+from __future__ import annotations
+
+import argparse
 from collections import Counter
+import json
+import os
+from pathlib import Path
+
 import numpy as np
 import tensorflow as tf
+from sklearn.metrics import balanced_accuracy_score, f1_score
 from tensorflow.keras import Sequential
-from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, BatchNormalization
-from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
-from sklearn.model_selection import train_test_split
-import json
+from tensorflow.keras.layers import BatchNormalization, Dense, Dropout, Input, LSTM
+from tensorflow.keras.optimizers import Adam
 
-# ---- مسارات البيانات القديمة والجديدة ----
+from signova_features import (
+    FRAMES,
+    MODEL_DIM,
+    POSE_DIM,
+    PREPROCESSING_VERSION,
+    add_velocity_features,
+    enhance_pose_sequence,
+)
+
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 OLD_ROOT = PROJECT_ROOT / "dataset" / "dataset"
 OLD_FEATURES = OLD_ROOT / "clean" / "extracted_features_v3"
-
-NEW_ROOT = PROJECT_ROOT / "New_dataset" / "dataset"
-NEW_CLEAN = NEW_ROOT / "clean"
+NEW_CLEAN = PROJECT_ROOT / "New_dataset" / "dataset" / "clean"
 NEW_FEATURES = NEW_CLEAN / "clean" / "extracted_features_v3"
 JSON_PATH = NEW_CLEAN / "WLASL_selected_166.json"
-MODELS_DIR = NEW_ROOT / "models_combined_166"
+MODELS_DIR = PROJECT_ROOT / "New_dataset" / "dataset" / "models_combined_166"
+MODEL_PATH = MODELS_DIR / "sign_language_model_166.keras"
+CLASS_PATH = MODELS_DIR / "class_names_166.npy"
+REPORT_PATH = MODELS_DIR / "training_report_166.json"
+NUM_CLASSES = 166
+SEED = 42
 
-# تثبيت العشوائية لضمان تكرار النتائج
-np.random.seed(42)
-tf.random.set_seed(42)
 
-def normalize_video_id(x):
-    x = str(x).strip()
-    return str(int(x)) if x.isdigit() else x
+def normalize_video_id(value: object) -> str:
+    text = str(value).strip()
+    return str(int(text)) if text.isdigit() else text
 
-def load_video_labels():
-    if not JSON_PATH.exists():
-        raise FileNotFoundError(f"Missing JSON: {JSON_PATH}")
+
+def load_video_metadata() -> dict[str, tuple[str, str]]:
+    if not JSON_PATH.is_file():
+        raise FileNotFoundError(f"Missing labels file: {JSON_PATH}")
     data = json.loads(JSON_PATH.read_text(encoding="utf-8"))
-    labels = {}
-    for cls in data.get("classes", []):
-        gloss = str(cls.get("gloss", "")).strip()
+    metadata: dict[str, tuple[str, str]] = {}
+    for sign_class in data.get("classes", []):
+        gloss = str(sign_class.get("gloss", "")).strip()
         if not gloss:
             continue
-        for inst in cls.get("instances", []):
-            if inst.get("video_id") is None:
-                continue
-            vid = normalize_video_id(inst["video_id"])
-            labels[vid] = gloss
-    return labels
+        for instance in sign_class.get("instances", []):
+            if instance.get("video_id") is not None:
+                split = str(instance.get("split", "")).strip().lower()
+                if split not in {"train", "val", "test"}:
+                    raise ValueError(
+                        f"Video {instance['video_id']} has unsupported source split {split!r}."
+                    )
+                video_id = normalize_video_id(instance["video_id"])
+                value = (gloss, split)
+                if video_id in metadata and metadata[video_id] != value:
+                    raise ValueError(f"Video id {video_id} has conflicting labels or source splits.")
+                metadata[video_id] = value
+    return metadata
 
-def load_feature_file(path):
-    return np.asarray(np.load(path, allow_pickle=False), dtype=np.float32)
 
-# تحميل التصنيفات
-labels_raw = load_video_labels()
-labels = {normalize_video_id(k): v for k, v in labels_raw.items()}
+def collect_feature_paths() -> dict[str, Path]:
+    # Prefer the selected 166-class dataset when a video id exists in both sets.
+    paths: dict[str, Path] = {}
+    for folder in (NEW_FEATURES, OLD_FEATURES):
+        if folder.is_dir():
+            for path in sorted(folder.glob("*.npy")):
+                paths.setdefault(normalize_video_id(path.stem), path)
+    return paths
 
-# جمع جميع ملفات الـ npy من المجلدين (القديم والجديد) دون تكرار للـ video_id
-feature_paths = {}
-for folder in [NEW_FEATURES, OLD_FEATURES]:
-    if folder.exists():
-        for path in folder.glob("*.npy"):
-            vid = normalize_video_id(path.stem)
-            if vid not in feature_paths:  # تفضيل الجديد لو موجود كنسخة أحدث، أو دمجهم
-                feature_paths[vid] = path
 
-# جمع الكلاسات المتاحة
-all_labels_list = []
-for vid, path in feature_paths.items():
-    if vid in labels:
-        all_labels_list.append(labels[vid])
+def load_examples() -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str], dict[str, int]]:
+    metadata = load_video_metadata()
+    paths = collect_feature_paths()
+    examples: list[np.ndarray] = []
+    glosses: list[str] = []
+    source_splits: list[str] = []
+    skipped: list[str] = []
 
-class_counts = Counter(all_labels_list)
-TOP_N_CLASSES = min(166, len(class_counts))
-chosen_classes = [item[0] for item in class_counts.most_common(TOP_N_CLASSES)]
-print(f"🔥 Training on Combined Dataset Vocabulary: {TOP_N_CLASSES} Classes (Total Files: {len(feature_paths)})")
+    for video_id, path in sorted(paths.items()):
+        label_info = metadata.get(video_id)
+        if label_info is None:
+            continue
+        gloss, split = label_info
+        try:
+            pose = np.load(path, allow_pickle=False)
+            examples.append(enhance_pose_sequence(pose))
+            glosses.append(gloss)
+            source_splits.append(split)
+        except (OSError, ValueError, TypeError) as error:
+            skipped.append(f"{path.name}: {error}")
 
-label_to_idx = {name: i for i, name in enumerate(chosen_classes)}
+    if skipped:
+        details = "\n".join(skipped[:10])
+        raise ValueError(
+            f"Found {len(skipped)} invalid labeled feature file(s); fix the source data before training.\n{details}"
+        )
 
-X_raw, y_raw = [], []
+    class_counts = Counter(glosses)
+    if len(class_counts) != NUM_CLASSES:
+        raise ValueError(
+            f"Expected all {NUM_CLASSES} labeled classes, found {len(class_counts)}. "
+            "No model files were changed."
+        )
+    class_names = sorted(class_counts)
+    label_to_idx = {name: index for index, name in enumerate(class_names)}
+    y = np.asarray([label_to_idx[gloss] for gloss in glosses], dtype=np.int32)
+    split_ids = np.asarray(source_splits, dtype=np.str_)
+    X = np.asarray(examples, dtype=np.float32)
+    counts_by_class = {name: class_counts[name] for name in class_names}
+    if X.ndim != 3 or X.shape[1:] != (FRAMES, MODEL_DIM):
+        raise ValueError(f"Unexpected model input array shape: {X.shape}.")
+    train_counts = np.bincount(y[split_ids == "train"], minlength=len(class_names))
+    if np.any(train_counts < 2):
+        missing = [class_names[i] for i, count in enumerate(train_counts) if count < 2]
+        raise ValueError(
+            "Each class needs at least two training clips in the official split; "
+            f"insufficient support: {missing}. No model files were changed."
+        )
+    return X, y, split_ids, class_names, counts_by_class
 
-for vid, path in feature_paths.items():
-    if vid not in labels:
-        continue
-    label = labels[vid]
-    if label in label_to_idx:
-        seq = load_feature_file(path)
 
-        # Normalization
-        normalized_seq = np.zeros_like(seq)
-        for t in range(seq.shape[0]):
-            frame = seq[t].reshape(-1, 2)
-            valid_pts = frame[np.any(frame != 0, axis=1)]
-            if len(valid_pts) > 0:
-                center = np.mean(valid_pts, axis=0)
-                normalized_seq[t] = (frame - center).flatten()
-            else:
-                normalized_seq[t] = seq[t]
+def split_examples(
+    X: np.ndarray, y: np.ndarray, split_ids: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Use WLASL's supplied, disjoint train/validation/test video partitions."""
+    if not (len(X) == len(y) == len(split_ids)):
+        raise ValueError("Features, labels, and source split ids must have equal lengths.")
+    masks = {name: split_ids == name for name in ("train", "val", "test")}
+    if any(not mask.any() for mask in masks.values()):
+        raise ValueError("The labeled feature set must include train, val, and test videos.")
+    return (
+        X[masks["train"]],
+        y[masks["train"]],
+        X[masks["val"]],
+        y[masks["val"]],
+        X[masks["test"]],
+        y[masks["test"]],
+    )
 
-        # Velocity
-        if normalized_seq.shape[0] > 1:
-            vel = np.vstack([np.zeros((1, normalized_seq.shape[1])), np.abs(np.diff(normalized_seq, axis=0))])
-        else:
-            vel = np.zeros_like(normalized_seq)
 
-        enhanced_seq = np.concatenate([normalized_seq, vel], axis=-1)
-        X_raw.append(enhanced_seq)
-        y_raw.append(label_to_idx[label])
+def augment_sequence(sequence: np.ndarray, rng: np.random.Generator) -> list[np.ndarray]:
+    normalized = sequence[:, :POSE_DIM].copy()
+    variants = [sequence]
 
-# دالة Data Augmentation لمضاعفة وتحسين قوة العينات
-def augment_sequence(seq):
-    augmented_list = [seq]
-    noise = np.random.normal(0, 0.01, seq.shape)
-    augmented_list.append(seq + noise)
+    # Keep missing-joint sentinels at zero while adding small landmark jitter.
+    joints = normalized.reshape(FRAMES, POSE_DIM // 2, 2)
+    visible = np.any(joints != 0, axis=-1)
+    jittered = joints.copy()
+    jittered += rng.normal(0, 0.005, size=joints.shape).astype(np.float32) * visible[..., None]
+    variants.append(add_velocity_features(jittered.reshape(FRAMES, POSE_DIM)))
 
-    length = seq.shape[0]
-    if length > 5:
-        indices = np.linspace(0, length - 1, int(length * 0.9))
-        indices = np.clip(indices, 0, length - 1).astype(int)
-        resampled = seq[indices]
-        if len(resampled) < length:
-            padded = np.pad(resampled, ((0, length - len(resampled)), (0, 0)), mode='edge')
-            augmented_list.append(padded)
+    # Slightly shorten the gesture in time, then pad with the last frame.
+    sample_count = max(2, int(FRAMES * 0.9))
+    indices = np.linspace(0, FRAMES - 1, sample_count, dtype=int)
+    shortened = normalized[indices]
+    if len(shortened) < FRAMES:
+        shortened = np.pad(
+            shortened,
+            ((0, FRAMES - len(shortened)), (0, 0)),
+            mode="edge",
+        )
+    variants.append(add_velocity_features(shortened[:FRAMES]))
+    return variants
 
-    return augmented_list
 
-X_train_raw, X_test, y_train_raw, y_test = train_test_split(
-    np.asarray(X_raw, dtype=np.float32),
-    np.asarray(y_raw, dtype=np.int32),
-    test_size=0.2,
-    random_state=42,
-    stratify=y_raw,
-)
+def build_model() -> tf.keras.Model:
+    # Smaller capacity is intentional: there are only about ten original clips per class.
+    model = Sequential(
+        [
+            Input(shape=(FRAMES, MODEL_DIM)),
+            LSTM(64, return_sequences=True),
+            Dropout(0.3),
+            LSTM(32),
+            Dropout(0.3),
+            Dense(64, activation="relu"),
+            BatchNormalization(),
+            Dropout(0.35),
+            Dense(NUM_CLASSES, activation="softmax"),
+        ]
+    )
+    model.compile(
+        optimizer=Adam(learning_rate=0.001),
+        loss="sparse_categorical_crossentropy",
+        metrics=["accuracy"],
+    )
+    return model
 
-# Augment only the training split so related copies of one video never leak into evaluation.
-X_train, y_train = [], []
-for seq, label in zip(X_train_raw, y_train_raw):
-    for aug_seq in augment_sequence(seq):
-        X_train.append(aug_seq)
-        y_train.append(label)
 
-X_train = np.asarray(X_train, dtype=np.float32)
-y_train = np.asarray(y_train, dtype=np.int32)
-X_test = np.asarray(X_test, dtype=np.float32)
-y_test = np.asarray(y_test, dtype=np.int32)
+def train(epochs: int, batch_size: int) -> dict[str, object]:
+    np.random.seed(SEED)
+    tf.keras.utils.set_random_seed(SEED)
 
-print(f"🔥 Training samples after augmentation: {len(X_train)}")
-print(f"🧪 Held-out test samples: {len(X_test)}")
+    X, y, split_ids, class_names, source_class_counts = load_examples()
+    X_train, y_train, X_validation, y_validation, X_test, y_test = split_examples(X, y, split_ids)
 
-# المعمارية القوية للـ LSTM
-model = Sequential([
-    Input(shape=(X_train.shape[1], X_train.shape[2])),
-    LSTM(256, return_sequences=True),
-    Dropout(0.4),
-    LSTM(128),
-    Dropout(0.4),
-    Dense(256, activation="relu"),
-    BatchNormalization(),
-    Dropout(0.4),
-    Dense(len(chosen_classes), activation="softmax")
-])
+    rng = np.random.default_rng(SEED)
+    augmented_X: list[np.ndarray] = []
+    augmented_y: list[int] = []
+    for sequence, label in zip(X_train, y_train):
+        for variant in augment_sequence(sequence, rng):
+            augmented_X.append(variant)
+            augmented_y.append(int(label))
+    X_train_augmented = np.asarray(augmented_X, dtype=np.float32)
+    y_train_augmented = np.asarray(augmented_y, dtype=np.int32)
 
-model.compile(
-    optimizer=Adam(learning_rate=0.001),
-    loss="sparse_categorical_crossentropy",
-    metrics=["accuracy"],
-)
+    train_counts = np.bincount(y_train, minlength=NUM_CLASSES)
+    class_weights = {
+        index: float(np.sqrt(len(y_train) / (NUM_CLASSES * max(count, 1))))
+        for index, count in enumerate(train_counts)
+    }
 
-callbacks = [
-    ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=15, min_lr=0.00001, verbose=1),
-    EarlyStopping(monitor='val_accuracy', patience=40, restore_best_weights=True, verbose=1)
-]
+    print(
+        f"Classes: {NUM_CLASSES} | source clips: {len(X)} | "
+        f"train/validation/test: {len(y_train)}/{len(y_validation)}/{len(y_test)} | "
+        f"augmented train: {len(X_train_augmented)}"
+    )
+    print(
+        f"Input per clip: ({FRAMES}, {MODEL_DIM}) | class clips range: "
+        f"{min(source_class_counts.values())}–{max(source_class_counts.values())}"
+    )
 
-history = model.fit(
-    X_train, y_train,
-    validation_data=(X_test, y_test),
-    epochs=200,
-    batch_size=16,
-    callbacks=callbacks,
-    verbose=1
-)
+    model = build_model()
+    callbacks = [
+        ReduceLROnPlateau(
+            monitor="val_loss", factor=0.5, patience=6, min_lr=1e-5, verbose=1
+        ),
+        EarlyStopping(
+            monitor="val_loss", patience=18, restore_best_weights=True, verbose=1
+        ),
+    ]
+    history = model.fit(
+        X_train_augmented,
+        y_train_augmented,
+        validation_data=(X_validation, y_validation),
+        epochs=epochs,
+        batch_size=batch_size,
+        callbacks=callbacks,
+        class_weight=class_weights,
+        verbose=1,
+    )
 
-loss, accuracy = model.evaluate(X_test, y_test, verbose=1)
-print(f"\n🚀 Combined (Old + New) LSTM Test Accuracy: {accuracy * 100:.2f}%")
+    test_loss, test_accuracy = model.evaluate(X_test, y_test, verbose=0)
+    test_probabilities = model.predict(X_test, verbose=0)
+    test_predictions = np.argmax(test_probabilities, axis=1)
+    test_supported_labels = np.unique(y_test)
+    majority_baseline = float(np.bincount(y_test).max() / len(y_test))
+    validation_accuracy = float(max(history.history.get("val_accuracy", [0.0])))
 
-MODELS_DIR.mkdir(parents=True, exist_ok=True)
-model.save(MODELS_DIR / "sign_language_model_166.keras")
-np.save(MODELS_DIR / "class_names_166.npy", np.array(chosen_classes))
-print(f"\n✅ Combined model saved successfully!")
+    # Keep the existing deployable bundle intact unless training and evaluation succeed.
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    candidate_model = MODELS_DIR / ".sign_language_model_166_candidate.keras"
+    candidate_classes = MODELS_DIR / ".class_names_166_candidate.npy"
+    candidate_report = MODELS_DIR / ".training_report_166_candidate.json"
+    model.save(candidate_model)
+    np.save(candidate_classes, np.asarray(class_names, dtype=np.str_))
+
+    report: dict[str, object] = {
+        "classes": NUM_CLASSES,
+        "class_names": class_names,
+        "source_class_counts": source_class_counts,
+        "train_class_counts": {
+            name: int(count) for name, count in zip(class_names, train_counts)
+        },
+        "samples": {
+            "source_total": int(len(X)),
+            "train_original": int(len(y_train)),
+            "train_augmented": int(len(y_train_augmented)),
+            "validation": int(len(y_validation)),
+            "test": int(len(y_test)),
+        },
+        "source_split_strategy": "official WLASL train/val/test partitions",
+        "validation_class_coverage": int(len(np.unique(y_validation))),
+        "test_class_coverage": int(len(np.unique(y_test))),
+        "test_class_names": [class_names[index] for index in np.unique(y_test)],
+        "test_class_counts": {
+            class_names[index]: int(np.sum(y_test == index)) for index in test_supported_labels
+        },
+        "input_shape": [None, FRAMES, MODEL_DIM],
+        "preprocessing": PREPROCESSING_VERSION,
+        "seed": SEED,
+        "epochs_completed": len(history.history.get("loss", [])),
+        "best_validation_accuracy": validation_accuracy,
+        "test_loss": float(test_loss),
+        "test_accuracy": float(test_accuracy),
+        "test_balanced_accuracy": float(balanced_accuracy_score(y_test, test_predictions)),
+        "test_macro_f1": float(
+            f1_score(
+                y_test,
+                test_predictions,
+                labels=test_supported_labels,
+                average="macro",
+                zero_division=0,
+            )
+        ),
+        "test_majority_baseline_accuracy": majority_baseline,
+        "chance_baseline_accuracy": 1.0 / NUM_CLASSES,
+        "model_path": str(MODEL_PATH.relative_to(PROJECT_ROOT)).replace("\\", "/"),
+        "class_names_path": str(CLASS_PATH.relative_to(PROJECT_ROOT)).replace("\\", "/"),
+        "evaluation_split_used_for_callbacks": False,
+    }
+    candidate_report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+    os.replace(candidate_model, MODEL_PATH)
+    os.replace(candidate_classes, CLASS_PATH)
+    os.replace(candidate_report, REPORT_PATH)
+    print(
+        f"Held-out test accuracy: {test_accuracy:.2%} | "
+        f"balanced accuracy: {report['test_balanced_accuracy']:.2%} | "
+        f"majority baseline: {majority_baseline:.2%}"
+    )
+    print(f"Saved model, class mapping, and report under {MODELS_DIR}")
+    return report
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Train Signova's 166-class sign model.")
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--batch-size", type=int, default=16)
+    args = parser.parse_args()
+    if args.epochs < 1 or args.batch_size < 1:
+        parser.error("--epochs and --batch-size must be positive integers")
+    train(args.epochs, args.batch_size)
+
+
+if __name__ == "__main__":
+    main()

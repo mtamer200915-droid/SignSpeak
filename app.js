@@ -25,12 +25,14 @@
 
   const pages = ["home", "translator", "history", "about"];
   const pageLabels = { home: "Home", translator: "Translator", history: "History", about: "About Signova" };
+  const API_BASE = (window.SIGNOVA_API_BASE || "http://127.0.0.1:8000").replace(/\/+$/, "");
   const state = { currentPage: "home", stream: null, currentPrediction: null, sentence: [], history: [] };
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
 
   const elements = {
     sidebar: $("#sidebar"), pageCrumb: $("#pageCrumb"), toast: $("#toast"),
+    apiStatus: $("#apiStatus"),
     cameraVideo: $("#cameraVideo"), cameraStage: $("#cameraStage"), cameraStatus: $("#cameraStatus"),
     startCamera: $("#startCamera"), stopCamera: $("#stopCamera"), cameraHelp: $("#cameraHelp"),
     predictedWord: $("#predictedWord"), predictionDescription: $("#predictionDescription"),
@@ -48,6 +50,29 @@
     toastTimer = setTimeout(() => elements.toast.classList.remove("show"), 2800);
   }
 
+  async function checkApiHealth() {
+    if (!elements.apiStatus) return;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(`${API_BASE}/health`, { signal: controller.signal });
+      if (!response.ok) throw new Error("API health check failed");
+      const health = await response.json();
+      if (health.status !== "ok" || !health.model_loaded || health.classes !== 166) {
+        throw new Error("Model is not ready");
+      }
+      elements.apiStatus.textContent = "API and 166-class model ready";
+      elements.apiStatus.classList.remove("error");
+      elements.apiStatus.classList.add("ready");
+    } catch (error) {
+      elements.apiStatus.textContent = "API unavailable — check backend and model files";
+      elements.apiStatus.classList.remove("ready");
+      elements.apiStatus.classList.add("error");
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   function navigate(page) {
     if (!pages.includes(page)) return;
     state.currentPage = page;
@@ -63,7 +88,6 @@
   $("#mobileMenu").addEventListener("click", () => elements.sidebar.classList.toggle("open"));
 
   let mediaRecorder = null;
-  let recordedChunks = [];
 
   async function startCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -86,7 +110,12 @@
       elements.cameraHelp.textContent = "الكاميرا تعمل. ابدأ الحركة وعند الانتهاء اضغط Stop.";
       toast("Camera started successfully.");
 
-      setupMediaRecorder();
+      if (!setupMediaRecorder()) {
+        const message = "Video recording isn't supported in this browser. Upload a short sign video instead.";
+        stopCamera();
+        elements.cameraHelp.textContent = message;
+        toast(message);
+      }
 
     } catch (error) {
       console.error(error);
@@ -97,50 +126,68 @@
   }
 
   function setupMediaRecorder() {
-    if (!state.stream) return;
+    if (!state.stream || typeof MediaRecorder === "undefined") return false;
 
     try {
-      let options = { mimeType: 'video/webm;codecs=vp8' };
-      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-        options = { mimeType: 'video/webm' };
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          options = {};
-        }
-      }
-
-      mediaRecorder = new MediaRecorder(state.stream, options);
+      const supportedTypes = [
+        "video/webm;codecs=vp9",
+        "video/webm;codecs=vp8",
+        "video/webm",
+        "video/mp4"
+      ];
+      const mimeType = supportedTypes.find(
+        type => typeof MediaRecorder.isTypeSupported !== "function" || MediaRecorder.isTypeSupported(type)
+      );
+      mediaRecorder = new MediaRecorder(state.stream, mimeType ? { mimeType } : undefined);
     } catch (e) {
       console.error("MediaRecorder error:", e);
-      return;
+      return false;
     }
 
-    recordedChunks = [];
+    const recorder = mediaRecorder;
+    const recordedChunks = [];
 
-    mediaRecorder.ondataavailable = (e) => {
+    recorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) {
         recordedChunks.push(e.data);
       }
     };
 
-    mediaRecorder.onstop = async () => {
+    recorder.onerror = (event) => {
+      console.error("Recording error:", event.error || event);
+      elements.cameraHelp.textContent = "The camera recording stopped unexpectedly. Try again or upload a video.";
+      toast("Camera recording failed.");
+    };
+
+    recorder.onstop = async () => {
       if (recordedChunks.length === 0) {
         toast("لم يتم تسجيل بيانات كافية.");
         return;
       }
 
-      const blob = new Blob(recordedChunks, { type: 'video/webm' });
-      recordedChunks = [];
+      const mimeType = recorder.mimeType || recordedChunks[0].type || "video/webm";
+      const blob = new Blob(recordedChunks, { type: mimeType });
 
       if (blob.size > 100) {
-        const file = new File([blob], "user_gesture.webm", { type: "video/webm" });
+        const extension = mimeType.toLowerCase().includes("mp4") ? "mp4" : "webm";
+        const file = new File([blob], `signova_gesture.${extension}`, { type: mimeType });
         await sendVideoFileToBackend(file);
+      } else {
+        toast("لم يتم تسجيل بيانات كافية. جرّب تسجيل الإشارة مرة أخرى.");
       }
     };
 
-    mediaRecorder.start();
+    try {
+      mediaRecorder.start(250);
+    } catch (e) {
+      console.error("Could not start recording:", e);
+      mediaRecorder = null;
+      return false;
+    }
     elements.cameraStatus.textContent = "Recording gesture...";
     elements.cameraHelp.textContent = "جاري تسجيل إشارتك... اضغط Stop عند الانتهاء.";
     toast("بدء تسجيل الحركة...");
+    return true;
   }
 
   function stopCamera() {
@@ -175,16 +222,13 @@
     elements.sentenceFeedback.textContent = "جاري تحليل الإشارة بواسطة نموذج الذكاء الاصطناعي...";
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/predict", {
+      const response = await fetch(`${API_BASE}/api/predict`, {
         method: "POST",
         body: formData
       });
 
-      if (!response.ok) {
-        throw new Error("فشل الاتصال بالخادم المحلي.");
-      }
-
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.detail || "فشل الاتصال بالخادم المحلي.");
 
       if (result && result.word) {
         showRealPrediction({
@@ -194,12 +238,14 @@
         });
 
         toast(`تم التعرف: ${result.word}`);
-
+      } else {
+        throw new Error("لم يرجع الخادم كلمة متوقعة. جرّب تسجيل الإشارة مرة أخرى.");
       }
 
     } catch (error) {
       console.error("Backend connection error:", error);
-      elements.sentenceFeedback.textContent = "تعذر الاتصال بالباك إيند. تأكد من تشغيل app.py";
+      elements.sentenceFeedback.textContent = `${error.message} تأكد من تشغيل backend وإتاحة عنوانه للمتصفح.`;
+      toast("تعذر تحليل الفيديو.");
     }
   }
 
@@ -321,6 +367,7 @@
   });
 
   window.addEventListener("beforeunload", stopCamera);
+  checkApiHealth();
   renderSentence();
   renderHistory();
 })();
