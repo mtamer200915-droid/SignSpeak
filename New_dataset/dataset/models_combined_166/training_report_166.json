@@ -807,8 +807,14 @@
   "test_loss": 3.5685782432556152,
   "test_accuracy": 0.15422885119915009,
   "test_balanced_accuracy": 0.16304347826086957,
-  "minimum_accuracy_quality_gate": 0.1,
   "test_macro_f1": 0.13783643892339545,
+  "baseline_quality_metrics": {
+    "validation_accuracy": 0.13740457594394684,
+    "test_accuracy": 0.15422885119915009,
+    "test_balanced_accuracy": 0.16304347826086957,
+    "test_macro_f1": 0.13783643892339545
+  },
+  "minimum_accuracy_quality_gate": 0.1,
   "test_majority_baseline_accuracy": 0.014925373134328358,
   "chance_baseline_accuracy": 0.006024096385542169,
   "model_path": "New_dataset/dataset/models_combined_166/sign_language_model_166.keras",
