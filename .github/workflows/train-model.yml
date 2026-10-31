@@ -1,0 +1,68 @@
+name: Train and validate Signova model
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/train-model.yml
+      - SignNova_Complete.py
+      - signova_features.py
+      - New_dataset/dataset/clean/WLASL_selected_166.json
+      - New_dataset/dataset/clean/clean/extracted_features_v3/**
+      - dataset/dataset/clean/extracted_features_v3/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: signova-model-training
+  cancel-in-progress: false
+
+jobs:
+  train-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out model code and landmark data only
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            SignNova_Complete.py
+            signova_features.py
+            New_dataset/dataset/clean/WLASL_selected_166.json
+            New_dataset/dataset/clean/clean/extracted_features_v3
+            dataset/dataset/clean/extracted_features_v3
+            New_dataset/dataset/models_combined_166/class_names_166.npy
+            New_dataset/dataset/models_combined_166/sign_language_model_166.keras
+            New_dataset/dataset/models_combined_166/training_report_166.json
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "numpy>=1.26,<2.2" "scikit-learn>=1.4,<2" "tensorflow>=2.16,<2.22"
+
+      - name: Train and evaluate on official WLASL splits
+        env:
+          TF_CPP_MIN_LOG_LEVEL: "2"
+          OMP_NUM_THREADS: "4"
+        run: python SignNova_Complete.py --epochs 100 --batch-size 16 --min-accuracy 0.10
+
+      - name: Save the validated model to the repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add New_dataset/dataset/models_combined_166/sign_language_model_166.keras New_dataset/dataset/models_combined_166/class_names_166.npy New_dataset/dataset/models_combined_166/training_report_166.json
+          if git diff --cached --quiet; then
+            echo "The validated model bundle is unchanged."
+          else
+            git commit -m "Update Signova model after quality-gated training"
+            git push
+          fi

@@ -38,6 +38,8 @@ The report currently checked into this repository is from an older run. It repor
 
 Training now keeps the existing model files unless validation accuracy, test accuracy, and balanced test accuracy each reach at least 10%. This is a minimum quality gate to reject near-random models, not a claim that 10% is good enough for real communication. `--min-accuracy` can raise the gate; it should not be lowered to force a weak model into use.
 
+The public repository also has a Linux GitHub Actions training workflow. It runs when the training code or tracked feature data changes, and commits the model, class mapping, and report only when the quality gate passes. It can also be started from the Actions tab. Standard GitHub-hosted runners are free for public repositories; this does not keep the prediction API online.
+
 The API checks that the model, class-name file, and training report use the same preprocessing and class order. It will refuse to start with the current stale bundle; complete a fresh training run before testing camera predictions.
 
 ## Run the camera workflow locally
