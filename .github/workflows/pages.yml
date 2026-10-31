@@ -1,0 +1,57 @@
+name: Publish Signova website
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out website files only
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            app.js
+            index.html
+            style.css
+            SignNova_Complete.py
+            predict.py
+            signova_features.py
+            Signova_Frontend_DarkAI/app.py
+          sparse-checkout-cone-mode: false
+
+      - name: Check application syntax
+        run: |
+          node --check app.js
+          python3 -m py_compile SignNova_Complete.py predict.py signova_features.py Signova_Frontend_DarkAI/app.py
+
+      - name: Prepare static website
+        run: |
+          mkdir site
+          cp index.html style.css app.js site/
+          touch site/.nojekyll
+
+      - name: Upload website artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: Publish to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

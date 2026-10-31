@@ -1,31 +1,27 @@
 (() => {
   "use strict";
 
-  // ==================== نظام الحماية والأمان (Security Layer) ====================
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "F12") { e.preventDefault(); return false; }
-    if (e.ctrlKey && e.shiftKey && ["I", "J", "C", "i", "j", "c"].includes(e.key)) { e.preventDefault(); return false; }
-    if (e.ctrlKey && (e.key === "U" || e.key === "u")) { e.preventDefault(); return false; }
-    if (e.ctrlKey && (e.key === "S" || e.key === "s")) { e.preventDefault(); return false; }
-  });
-
-  document.addEventListener("contextmenu", (e) => { e.preventDefault(); return false; });
-
-  let devtoolsOpen = false;
-  const threshold = 160;
-  setInterval(() => {
-    const widthThreshold = window.outerWidth - window.innerWidth > threshold;
-    const heightThreshold = window.outerHeight - window.innerHeight > threshold;
-    if ((widthThreshold || heightThreshold) && !devtoolsOpen) {
-      devtoolsOpen = true;
-      document.body.innerHTML = "<div style='background:#090d18;color:#ff5c5c;height:100vh;display:flex;align-items:center;justify-content:center;font-family:sans-serif;font-size:20px;text-align:center;'>عذراً، تم اكتشاف محاولة فحص النظام. تم تأمين الصفحة لحماية الملكية الفكرية.</div>";
-    }
-  }, 1000);
-  // ============================================================================
-
   const pages = ["home", "translator", "history", "about"];
   const pageLabels = { home: "Home", translator: "Translator", history: "History", about: "About Signova" };
-  const API_BASE = (window.SIGNOVA_API_BASE || "http://127.0.0.1:8000").replace(/\/+$/, "");
+  const requestedApi = new URLSearchParams(window.location.search).get("api");
+  function resolveApiBase() {
+    const configuredApi = window.SIGNOVA_API_BASE || requestedApi;
+    if (configuredApi) {
+      try {
+        const candidate = new URL(configuredApi, window.location.href);
+        const localHttp = candidate.protocol === "http:" && ["localhost", "127.0.0.1"].includes(candidate.hostname);
+        if (candidate.protocol !== "https:" && !localHttp) throw new Error("API URLs must use HTTPS outside localhost.");
+        if (candidate.username || candidate.password || candidate.search || candidate.hash || candidate.pathname !== "/") {
+          throw new Error("API URL must be an origin, such as https://api.example.com.");
+        }
+        return candidate.origin;
+      } catch {
+        // Invalid API links fall back to the local development server.
+      }
+    }
+    return "http://127.0.0.1:8000";
+  }
+  const API_BASE = resolveApiBase().replace(/\/+$/, "");
   const state = { currentPage: "home", stream: null, currentPrediction: null, sentence: [], history: [] };
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -34,7 +30,8 @@
     sidebar: $("#sidebar"), pageCrumb: $("#pageCrumb"), toast: $("#toast"),
     apiStatus: $("#apiStatus"),
     cameraVideo: $("#cameraVideo"), cameraStage: $("#cameraStage"), cameraStatus: $("#cameraStatus"),
-    startCamera: $("#startCamera"), stopCamera: $("#stopCamera"), cameraHelp: $("#cameraHelp"),
+    startCamera: $("#startCamera"), stopCamera: $("#stopCamera"), cameraOff: $("#cameraOff"),
+    cameraHelp: $("#cameraHelp"),
     predictedWord: $("#predictedWord"), predictionDescription: $("#predictionDescription"),
     confidenceText: $("#confidenceText"), confidenceBar: $("#confidenceBar"), demoPrediction: $("#demoPrediction"),
     addWord: $("#addWord"), sentenceBox: $("#sentenceBox"), wordCount: $("#wordCount"),
@@ -103,16 +100,13 @@
       elements.cameraVideo.srcObject = state.stream;
       await elements.cameraVideo.play();
       elements.cameraStage.classList.add("camera-on");
-      elements.cameraStatus.textContent = "Camera on (Ready to Record)";
       elements.cameraStatus.parentElement.classList.add("on");
       elements.startCamera.disabled = true;
-      elements.stopCamera.disabled = false;
-      elements.cameraHelp.textContent = "الكاميرا تعمل. ابدأ الحركة وعند الانتهاء اضغط Stop.";
-      toast("Camera started successfully.");
+      elements.cameraOff.disabled = false;
 
       if (!setupMediaRecorder()) {
         const message = "Video recording isn't supported in this browser. Upload a short sign video instead.";
-        stopCamera();
+        turnCameraOff();
         elements.cameraHelp.textContent = message;
         toast(message);
       }
@@ -135,9 +129,9 @@
         "video/webm",
         "video/mp4"
       ];
-      const mimeType = supportedTypes.find(
-        type => typeof MediaRecorder.isTypeSupported !== "function" || MediaRecorder.isTypeSupported(type)
-      );
+      const mimeType = typeof MediaRecorder.isTypeSupported === "function"
+        ? supportedTypes.find(type => MediaRecorder.isTypeSupported(type))
+        : "";
       mediaRecorder = new MediaRecorder(state.stream, mimeType ? { mimeType } : undefined);
     } catch (e) {
       console.error("MediaRecorder error:", e);
@@ -160,8 +154,10 @@
     };
 
     recorder.onstop = async () => {
+      if (mediaRecorder === recorder) mediaRecorder = null;
       if (recordedChunks.length === 0) {
         toast("لم يتم تسجيل بيانات كافية.");
+        if (state.stream) setupMediaRecorder();
         return;
       }
 
@@ -174,6 +170,7 @@
         await sendVideoFileToBackend(file);
       } else {
         toast("لم يتم تسجيل بيانات كافية. جرّب تسجيل الإشارة مرة أخرى.");
+        if (state.stream) setupMediaRecorder();
       }
     };
 
@@ -186,16 +183,28 @@
     }
     elements.cameraStatus.textContent = "Recording gesture...";
     elements.cameraHelp.textContent = "جاري تسجيل إشارتك... اضغط Stop عند الانتهاء.";
+    elements.stopCamera.disabled = false;
     toast("بدء تسجيل الحركة...");
     return true;
   }
 
-  function stopCamera() {
+  function finishSign() {
     if (mediaRecorder && mediaRecorder.state === "recording") {
       mediaRecorder.stop();
-      toast("تم إيقاف التسجيل وجاري معالجة الحركة...");
+      elements.stopCamera.disabled = true;
+      elements.cameraStatus.textContent = "Analyzing sign...";
+      elements.cameraHelp.textContent = "جاري تحليل الكلمة. راجع التوقع ثم اضغط Done لإضافتها وبدء الكلمة التالية.";
+      elements.addWord.disabled = true;
+      toast("تم إيقاف التسجيل وجاري تحليل الكلمة...");
     }
+  }
 
+  function turnCameraOff() {
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      mediaRecorder.onstop = null;
+      mediaRecorder.stop();
+      mediaRecorder = null;
+    }
     if (state.stream) {
       state.stream.getTracks().forEach(track => track.stop());
       state.stream = null;
@@ -207,11 +216,13 @@
     elements.cameraStatus.parentElement.classList.remove("on");
     elements.startCamera.disabled = false;
     elements.stopCamera.disabled = true;
+    elements.cameraOff.disabled = true;
     elements.cameraHelp.textContent = "Camera stream stopped.";
   }
 
   elements.startCamera.addEventListener("click", startCamera);
-  elements.stopCamera.addEventListener("click", stopCamera);
+  elements.stopCamera.addEventListener("click", finishSign);
+  elements.cameraOff.addEventListener("click", turnCameraOff);
   $("#flipHint").addEventListener("click", () => toast("Tip: keep both hands visible and use steady lighting."));
 
   // ==================== ربط الباك إيند و Gemini ====================
@@ -220,6 +231,7 @@
     formData.append("file", videoFile, videoFile.name || "signova-upload.webm");
 
     elements.sentenceFeedback.textContent = "جاري تحليل الإشارة بواسطة نموذج الذكاء الاصطناعي...";
+    elements.addWord.disabled = true;
 
     try {
       const response = await fetch(`${API_BASE}/api/predict`, {
@@ -228,7 +240,7 @@
       });
 
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.detail || "فشل الاتصال بالخادم المحلي.");
+      if (!response.ok) throw new Error(result.detail || "فشل الاتصال بالخادم.");
 
       if (result && result.word) {
         showRealPrediction({
@@ -246,6 +258,7 @@
       console.error("Backend connection error:", error);
       elements.sentenceFeedback.textContent = `${error.message} تأكد من تشغيل backend وإتاحة عنوانه للمتصفح.`;
       toast("تعذر تحليل الفيديو.");
+      if (state.stream && !mediaRecorder) setupMediaRecorder();
     }
   }
 
@@ -253,9 +266,14 @@
     state.currentPrediction = prediction;
     elements.predictedWord.textContent = prediction.word;
     elements.predictionDescription.textContent = prediction.description;
-    elements.confidenceText.textContent = `${prediction.confidence}%`;
-    elements.confidenceBar.style.width = `${prediction.confidence}%`;
+    const confidence = Math.max(0, Math.min(100, Number(prediction.confidence) || 0));
+    elements.confidenceText.textContent = `${confidence}%`;
+    elements.confidenceBar.style.width = `${confidence}%`;
     elements.addWord.disabled = false;
+    if (state.stream) {
+      elements.cameraStatus.textContent = "Prediction ready · Press Done";
+      elements.cameraHelp.textContent = "راجع الكلمة. اضغط Done لإضافتها للجملة وبدء تسجيل الكلمة التالية.";
+    }
   }
 
   elements.demoPrediction.addEventListener("click", () => {
@@ -265,6 +283,11 @@
     input.onchange = (e) => {
       const file = e.target.files[0];
       if (file) {
+        if (mediaRecorder && mediaRecorder.state === "recording") {
+          mediaRecorder.onstop = null;
+          mediaRecorder.stop();
+          mediaRecorder = null;
+        }
         sendVideoFileToBackend(file);
       }
     };
@@ -337,8 +360,18 @@
     state.history.push(entry);
     renderSentence();
     renderHistory();
-    elements.sentenceFeedback.textContent = `"${entry.word}" added to sentence.`;
+    state.currentPrediction = null;
+    elements.addWord.disabled = true;
+    elements.predictedWord.textContent = "Ready for next sign";
+    elements.predictionDescription.textContent = "The previous word was added. Record or upload the next sign.";
+    elements.confidenceText.textContent = "—";
+    elements.confidenceBar.style.width = "0%";
+    elements.sentenceFeedback.textContent = `"${entry.word}" added. Your next word is ready.`;
     toast(`Added "${entry.word}".`);
+    if (state.stream && !mediaRecorder && !setupMediaRecorder()) {
+      turnCameraOff();
+      elements.cameraHelp.textContent = "Could not restart recording. Start the camera again or upload a video.";
+    }
   });
 
   $("#clearSentence").addEventListener("click", () => {
@@ -366,7 +399,7 @@
     toast("History cleared.");
   });
 
-  window.addEventListener("beforeunload", stopCamera);
+  window.addEventListener("beforeunload", turnCameraOff);
   checkApiHealth();
   renderSentence();
   renderHistory();

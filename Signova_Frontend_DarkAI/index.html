@@ -23,7 +23,7 @@
         <button class="nav-link" data-page="about"><span class="nav-icon">ⓘ</span>About Signova</button>
       </nav>
       <div class="sidebar-bottom">
-        <div class="status-card"><span class="status-dot"></span><div><strong>Signova translator</strong><small>Local API required</small></div></div>
+        <div class="status-card"><span class="status-dot"></span><div><strong>Signova translator</strong><small>API connection required</small></div></div>
         <div class="sidebar-foot">BUILT FOR ACCESSIBILITY <span>✳</span></div>
       </div>
     </aside>
@@ -32,7 +32,7 @@
       <header class="topbar">
         <button class="mobile-menu" id="mobileMenu" aria-label="Toggle navigation">☰</button>
         <div class="breadcrumbs"><span>Signova</span><b>/</b><strong id="pageCrumb">Home</strong></div>
-        <div class="top-actions"><span class="connection"><i></i> Local API</span><div class="avatar">SO</div></div>
+        <div class="top-actions"><span class="connection"><i></i> Signova API</span><div class="avatar">SO</div></div>
       </header>
 
       <section class="page active" id="page-home">
@@ -40,7 +40,7 @@
           <div class="hero-copy">
             <div class="eyebrow"><span class="eyebrow-dot"></span> COMMUNICATION WITHOUT BARRIERS</div>
             <h1>Every gesture<br />has a <span>voice.</span></h1>
-            <p>Signova explores a more connected world by turning American Sign Language gestures into text. Record a sign or upload a video; the local API returns an experimental prediction.</p>
+            <p>Signova explores a more connected world by turning selected American Sign Language gestures into text. Record a sign or upload a video; a connected API returns an experimental prediction.</p>
             <div class="hero-actions"><button class="btn btn-primary" data-go="translator">Open translator <span>↗</span></button><button class="btn btn-ghost" data-go="about">Explore the project</button></div>
             <div class="hero-metrics"><div><strong>ASL</strong><small>Language focus</small></div><div><strong>Video-based</strong><small>Translation mode</small></div><div><strong>Modular</strong><small>Integration-ready UI</small></div></div>
           </div>
@@ -63,11 +63,11 @@
           <button class="feature-card" data-go="history"><span class="feature-icon purple">◷</span><span class="feature-arrow">↗</span><h3>Review history</h3><p>See words you've added to this session and clear them any time.</p><span class="feature-link">View history <b>→</b></span></button>
           <button class="feature-card" data-go="about"><span class="feature-icon cyan">✳</span><span class="feature-arrow">↗</span><h3>About the project</h3><p>See how video capture, recognition, and sentence history fit together.</p><span class="feature-link">Meet Signova <b>→</b></span></button>
         </div>
-        <div class="notice"><span>ⓘ</span><p><b>For a prediction, start the local API.</b> Record a short clip or upload a video. Signova sends it to the local API for an experimental prediction.</p></div>
+        <div class="notice"><span>ⓘ</span><p><b>For a prediction, connect a Signova API.</b> GitHub Pages serves this interface; model predictions need a running API configured for this site.</p></div>
       </section>
 
       <section class="page" id="page-translator">
-        <div class="page-heading"><div><div class="eyebrow">CAMERA TRANSLATION</div><h1>Sign <span>Translator</span></h1><p>Record one sign for a few seconds and press Stop to analyze it, or upload a video. Prediction runs after recording.</p></div><span class="mode-badge"><i></i> LOCAL MODEL</span></div>
+        <div class="page-heading"><div><div class="eyebrow">CAMERA TRANSLATION</div><h1>Sign <span>Translator</span></h1><p>Record one sign, check its prediction, then press Done to add it and continue with the next word.</p></div><span class="mode-badge"><i></i> SIGNOVA API</span></div>
         <div class="translator-layout">
           <div class="panel camera-panel">
             <div class="panel-header"><div><span class="panel-kicker">01 / INPUT</span><h2>Camera feed</h2></div><span class="panel-status"><i></i><span id="cameraStatus">Camera off</span></span></div>
@@ -76,8 +76,8 @@
               <div class="camera-placeholder" id="cameraPlaceholder"><div class="camera-symbol">◉</div><h3>Your camera, your hands</h3><p>Keep your hands and upper body visible, then record one sign at a time.</p><span class="camera-hint">Camera access requires localhost or HTTPS permission</span></div>
               <div class="camera-overlay"><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span><span class="camera-tag"><i></i> LIVE PREVIEW</span></div>
             </div>
-            <div class="camera-controls"><button class="btn btn-primary" id="startCamera">Start camera <span>↗</span></button><button class="btn btn-ghost" id="stopCamera" disabled>Stop</button><button class="icon-btn" id="flipHint" title="Camera tips" aria-label="Camera tips">?</button></div>
-            <p class="helper-text" id="cameraHelp">The camera preview stays in this tab. Recordings are sent to the local backend when you stop.</p>
+            <div class="camera-controls"><button class="btn btn-primary" id="startCamera">Start camera <span>↗</span></button><button class="btn btn-ghost" id="stopCamera" disabled>Stop &amp; predict</button><button class="btn btn-ghost" id="cameraOff" disabled>Camera off</button><button class="icon-btn" id="flipHint" title="Camera tips" aria-label="Camera tips">?</button></div>
+            <p class="helper-text" id="cameraHelp">Record one sign, press Stop &amp; predict, then press Done to add the word and automatically record the next one.</p>
           </div>
           <div class="right-stack">
             <div class="panel prediction-panel">
@@ -90,8 +90,8 @@
             <div class="panel sentence-panel">
               <div class="panel-header"><div><span class="panel-kicker">03 / OUTPUT</span><h2>Your sentence</h2></div><span class="word-count" id="wordCount">0 words</span></div>
               <div class="sentence-box" id="sentenceBox"><span class="sentence-placeholder">Your recognized words will appear here…</span></div>
-              <div class="sentence-actions"><button class="btn btn-primary" id="addWord" disabled>Add word <span>＋</span></button><button class="btn btn-ghost" id="clearSentence">Clear</button><button class="icon-btn" id="copySentence" title="Copy sentence" aria-label="Copy sentence">▢</button></div>
-              <p class="helper-text" id="sentenceFeedback">Run a prediction, then add the word to your sentence.</p>
+              <div class="sentence-actions"><button class="btn btn-primary" id="addWord" disabled>Done · Next word <span>→</span></button><button class="btn btn-ghost" id="clearSentence">Clear</button><button class="icon-btn" id="copySentence" title="Copy sentence" aria-label="Copy sentence">▢</button></div>
+              <p class="helper-text" id="sentenceFeedback">Check each prediction, then press Done to build your sentence one word at a time.</p>
             </div>
           </div>
         </div>
@@ -106,17 +106,16 @@
 
       <section class="page" id="page-about">
         <div class="page-heading"><div><div class="eyebrow">THE IDEA BEHIND THE INTERFACE</div><h1>About <span>Signova</span></h1><p>Technology should bring people closer. Signova is a student project exploring sign-language recognition.</p></div><div class="about-logo">S<span>O</span></div></div>
-        <div class="about-hero panel"><div class="about-hero-copy"><span class="panel-kicker">OUR MISSION</span><h2>Making communication<br />feel more <span>connected.</span></h2><p>Signova's goal is to recognize selected American Sign Language (ASL) signs and present them as readable text. The frontend sends video to a local FastAPI backend that uses the trained model and optional Gemini verification.</p></div><div class="about-graphic"><div class="graphic-ring"></div><div class="graphic-core">✳</div><span class="graphic-word word-one">GESTURE</span><span class="graphic-word word-two">MEANING</span><span class="graphic-word word-three">CONNECTION</span></div></div>
+        <div class="about-hero panel"><div class="about-hero-copy"><span class="panel-kicker">OUR MISSION</span><h2>Making communication<br />feel more <span>connected.</span></h2><p>Signova's goal is to recognize selected American Sign Language (ASL) signs and present them as readable text. The frontend sends short clips to the Signova API; Gemini verification is optional.</p></div><div class="about-graphic"><div class="graphic-ring"></div><div class="graphic-core">✳</div><span class="graphic-word word-one">GESTURE</span><span class="graphic-word word-two">MEANING</span><span class="graphic-word word-three">CONNECTION</span></div></div>
         <div class="section-heading"><div><div class="eyebrow">HOW IT WORKS</div><h2>Three parts. One experience.</h2></div></div>
         <div class="steps-grid"><div class="step-card"><span>01</span><h3>Capture</h3><p>The browser asks for camera permission and shows the live video preview.</p><small>FRONTEND</small></div><div class="step-card"><span>02</span><h3>Recognize</h3><p>The backend extracts pose landmarks and runs the trained 166-class model; Gemini video verification is optional.</p><small>BACKEND + MODEL</small></div><div class="step-card"><span>03</span><h3>Communicate</h3><p>The interface displays the returned word and confidence and keeps a session-only sentence history.</p><small>FRONTEND</small></div></div>
-        <div class="panel integration-panel"><div class="integration-icon">⌘</div><div><span class="panel-kicker">INTEGRATION STATUS</span><h2>Local model connection</h2><p>Camera clips are sent to the Signova API at http://127.0.0.1:8000 by default. Start the backend with its model files available; hosted frontends need a reachable HTTPS API.</p><div class="integration-tags"><span id="apiStatus" class="api-health" role="status" aria-live="polite">Checking model connection…</span><span>HTML</span><span>CSS</span><span>JavaScript</span><span>Local API</span><span>166-class model</span></div></div></div>
+        <div class="panel integration-panel"><div class="integration-icon">⌘</div><div><span class="panel-kicker">INTEGRATION STATUS</span><h2>Signova API connection</h2><p>Open the team site with an HTTPS API address in the <code>?api=</code> link. The API host must have verified model files installed and allow this site's address.</p><div class="integration-tags"><span id="apiStatus" class="api-health" role="status" aria-live="polite">Checking model connection…</span><span>HTML</span><span>CSS</span><span>JavaScript</span><span>HTTPS API</span><span>166-class model</span></div></div></div>
       </section>
 
-      <footer class="app-footer"><span>© 2026 Signova</span><span>Built with accessibility in mind <b>✳</b></span><span class="footer-demo"><i></i> Experimental · Local model required</span></footer>
+      <footer class="app-footer"><span>© 2026 Signova</span><span>Built with accessibility in mind <b>✳</b></span><span class="footer-demo"><i></i> Experimental · Connected API required</span></footer>
     </main>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script>window.SIGNOVA_API_BASE = window.SIGNOVA_API_BASE || "http://127.0.0.1:8000";</script>
   <script src="app.js"></script>
 </body>
 </html>

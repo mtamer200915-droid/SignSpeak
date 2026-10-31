@@ -197,7 +197,9 @@ def build_model() -> tf.keras.Model:
     return model
 
 
-def train(epochs: int, batch_size: int) -> dict[str, object]:
+def train(epochs: int, batch_size: int, min_accuracy: float = 0.10) -> dict[str, object]:
+    if not 0.0 < min_accuracy <= 1.0:
+        raise ValueError("min_accuracy must be greater than 0 and at most 1.0")
     np.random.seed(SEED)
     tf.keras.utils.set_random_seed(SEED)
 
@@ -250,12 +252,23 @@ def train(epochs: int, batch_size: int) -> dict[str, object]:
         verbose=1,
     )
 
+    validation_loss, validation_accuracy = model.evaluate(X_validation, y_validation, verbose=0)
     test_loss, test_accuracy = model.evaluate(X_test, y_test, verbose=0)
     test_probabilities = model.predict(X_test, verbose=0)
     test_predictions = np.argmax(test_probabilities, axis=1)
     test_supported_labels = np.unique(y_test)
     majority_baseline = float(np.bincount(y_test).max() / len(y_test))
-    validation_accuracy = float(max(history.history.get("val_accuracy", [0.0])))
+    validation_accuracy = float(validation_accuracy)
+    test_accuracy = float(test_accuracy)
+    test_balanced_accuracy = float(balanced_accuracy_score(y_test, test_predictions))
+
+    if min(validation_accuracy, test_accuracy, test_balanced_accuracy) < min_accuracy:
+        raise RuntimeError(
+            "Model quality gate failed; no model files were changed. "
+            f"Required validation, test, and balanced test accuracy >= {min_accuracy:.0%}; "
+            f"got {validation_accuracy:.2%}, {test_accuracy:.2%}, "
+            f"and {test_balanced_accuracy:.2%}. Add or improve labeled clips before deployment."
+        )
 
     # Keep the existing deployable bundle intact unless training and evaluation succeed.
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -290,10 +303,12 @@ def train(epochs: int, batch_size: int) -> dict[str, object]:
         "preprocessing": PREPROCESSING_VERSION,
         "seed": SEED,
         "epochs_completed": len(history.history.get("loss", [])),
-        "best_validation_accuracy": validation_accuracy,
+        "validation_accuracy": validation_accuracy,
+        "validation_loss": float(validation_loss),
         "test_loss": float(test_loss),
-        "test_accuracy": float(test_accuracy),
-        "test_balanced_accuracy": float(balanced_accuracy_score(y_test, test_predictions)),
+        "test_accuracy": test_accuracy,
+        "test_balanced_accuracy": test_balanced_accuracy,
+        "minimum_accuracy_quality_gate": min_accuracy,
         "test_macro_f1": float(
             f1_score(
                 y_test,
@@ -327,10 +342,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train Signova's 166-class sign model.")
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument(
+        "--min-accuracy",
+        type=float,
+        default=0.10,
+        help="Minimum validation, test, and balanced test accuracy required to replace the saved model (default: 0.10).",
+    )
     args = parser.parse_args()
     if args.epochs < 1 or args.batch_size < 1:
         parser.error("--epochs and --batch-size must be positive integers")
-    train(args.epochs, args.batch_size)
+    if not 0.0 < args.min_accuracy <= 1.0:
+        parser.error("--min-accuracy must be greater than 0 and at most 1.0")
+    train(args.epochs, args.batch_size, args.min_accuracy)
 
 
 if __name__ == "__main__":
