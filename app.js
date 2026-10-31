@@ -41,7 +41,7 @@
     framingGuide: $("#framingGuide"), framingTitle: $("#framingTitle"), framingMessage: $("#framingMessage"),
     predictedWord: $("#predictedWord"), predictionDescription: $("#predictionDescription"),
     confidenceText: $("#confidenceText"), confidenceBar: $("#confidenceBar"), demoPrediction: $("#demoPrediction"),
-    addWord: $("#addWord"), sentenceBox: $("#sentenceBox"), wordCount: $("#wordCount"),
+    addWord: $("#addWord"), playSentence: $("#playSentence"), sentenceBox: $("#sentenceBox"), wordCount: $("#wordCount"),
     sentenceFeedback: $("#sentenceFeedback"), historyRows: $("#historyRows"),
     historyWordTotal: $("#historyWordTotal"), historySentenceTotal: $("#historySentenceTotal")
   };
@@ -570,6 +570,7 @@
   });
 
   function renderSentence() {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     elements.sentenceBox.replaceChildren();
     if (!state.sentence.length) {
       const placeholder = document.createElement("span");
@@ -587,6 +588,7 @@
     }
     const count = state.sentence.length;
     elements.wordCount.textContent = `${count} ${count === 1 ? "word" : "words"}`;
+    elements.playSentence.disabled = count === 0 || !("speechSynthesis" in window) || typeof window.SpeechSynthesisUtterance !== "function";
     elements.historySentenceTotal.textContent = String(count);
   }
 
@@ -670,6 +672,21 @@
     } catch {
       toast(`Sentence: ${sentence}`);
     }
+  });
+
+  elements.playSentence.addEventListener("click", () => {
+    const sentence = state.sentence.map(entry => entry.word).join(" ");
+    if (!sentence) return;
+    if (!("speechSynthesis" in window) || typeof window.SpeechSynthesisUtterance !== "function") {
+      toast("Audio playback isn't supported by this browser.");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new window.SpeechSynthesisUtterance(sentence);
+    utterance.lang = "en-US";
+    utterance.rate = 0.95;
+    utterance.onerror = () => toast("Could not play the sentence audio.");
+    window.speechSynthesis.speak(utterance);
   });
 
   $("#clearHistory").addEventListener("click", () => {

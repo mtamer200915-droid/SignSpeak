@@ -61,7 +61,7 @@ Serve the frontend from another terminal in the repository root:
 python -m http.server 5500
 ```
 
-Open `http://localhost:5500`. In **Translator**, allow camera access and wait for the in-browser guide to show that your face and shoulders are centered. Press **Start sign**, perform one word, then press **Stop & predict**. The guide uses MediaPipe Pose Landmarker in the browser; the live preview is not uploaded, and the clip is sent to the API only after recording stops. You can switch between front and rear cameras while not recording. The API samples 30 frames, extracts pose landmarks, and runs the local model. The frontend also accepts uploaded sign videos.
+Open `http://localhost:5500`. In **Translator**, allow camera access and wait for the in-browser guide to show that your face and shoulders are centered. Press **Start sign**, perform one word, then press **Stop & predict**. The guide uses MediaPipe Pose Landmarker in the browser; the live preview is not uploaded, and the clip is sent to the API only after recording stops. You can switch between front and rear cameras while not recording. Press **Done** to add each reviewed prediction to your sentence, then **Play audio** to read the collected words aloud using the browser's built-in speech synthesis. The API samples 30 frames, extracts pose landmarks, and runs the local model. The frontend also accepts uploaded sign videos.
 
 The browser requires localhost or HTTPS for camera permission. The local development default is `http://127.0.0.1:8000`.
 

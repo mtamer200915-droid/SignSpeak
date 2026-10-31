@@ -15,4 +15,5 @@
 .integration-panel p a{color:#aabaff;text-decoration:underline;text-underline-offset:2px}
 .api-help{font-size:9px;color:#74839d;line-height:1.7;margin:8px 0 0}
 .api-help a{color:#aabaff;text-decoration:underline;text-underline-offset:2px}
+.sentence-actions{flex-wrap:wrap}
 @media(max-width:560px){.camera-controls .icon-btn{margin-left:0}.framing-guide{left:8px;right:8px;bottom:8px;padding:9px 10px}}
