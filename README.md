@@ -19,6 +19,7 @@ Use 64-bit Python 3.10–3.12. TensorFlow on native Windows runs on CPU. Install
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 python -m pip install -r requirements.txt
 ```
 
