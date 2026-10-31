@@ -258,6 +258,13 @@
     } catch (error) {
       console.error(error);
       const message = "Could not start the camera. Check browser permissions.";
+      if (state.stream) state.stream.getTracks().forEach(track => track.stop());
+      state.stream = null;
+      elements.cameraVideo.srcObject = null;
+      elements.cameraStage.classList.remove("camera-on");
+      elements.startCamera.disabled = false;
+      elements.cameraOff.disabled = true;
+      elements.flipCamera.disabled = true;
       elements.cameraHelp.textContent = message;
       toast(message);
     }
@@ -303,7 +310,8 @@
         toast("لم يتم تسجيل بيانات كافية.");
         state.isAnalyzing = false;
         elements.flipCamera.disabled = !state.stream;
-        elements.startSign.disabled = !state.stream || (!state.isFramingReady && !state.manualPoseFallback);
+        const ready = state.isFramingReady || state.manualPoseFallback;
+        setFramingState(ready ? "ready" : "adjust", ready ? "You’re ready to sign" : "Adjust your position", "No video was captured. Press Start sign to try again.", ready);
         return;
       }
 
@@ -318,7 +326,8 @@
         toast("لم يتم تسجيل بيانات كافية. جرّب تسجيل الإشارة مرة أخرى.");
         state.isAnalyzing = false;
         elements.flipCamera.disabled = !state.stream;
-        elements.startSign.disabled = !state.stream || (!state.isFramingReady && !state.manualPoseFallback);
+        const ready = state.isFramingReady || state.manualPoseFallback;
+        setFramingState(ready ? "ready" : "adjust", ready ? "You’re ready to sign" : "Adjust your position", "The clip was too short. Press Start sign and try again.", ready);
       }
     };
 
@@ -381,6 +390,9 @@
       startPoseGuide();
     } catch (error) {
       console.warn("Could not switch camera:", error);
+      if (state.stream) state.stream.getTracks().forEach(track => track.stop());
+      state.stream = null;
+      elements.cameraVideo.srcObject = null;
       try {
         state.stream = await getCameraStream(previousFacing);
         state.cameraFacingMode = previousFacing;
@@ -463,6 +475,7 @@
         elements.cameraStatus.textContent = "Prediction API offline";
         elements.cameraHelp.textContent = "The recording is ready, but this page has no live prediction API. Start a free demo and open its linked website.";
         elements.framingGuide.dataset.state = "manual";
+        elements.cameraStage.dataset.framing = "manual";
         elements.framingTitle.textContent = "Prediction API offline";
         elements.framingMessage.textContent = "Your recording could not be sent. Start the free API demo, then open its website link.";
       }
@@ -509,6 +522,7 @@
         elements.cameraStatus.textContent = "Ready to try again";
         elements.cameraHelp.textContent = "The video could not be analyzed. Check the API connection, then press Start sign to retry.";
         elements.framingGuide.dataset.state = state.isFramingReady ? "ready" : "adjust";
+        elements.cameraStage.dataset.framing = state.isFramingReady ? "ready" : "adjust";
         elements.framingTitle.textContent = "Prediction unavailable";
         elements.framingMessage.textContent = "Check the API connection, then try recording the sign again.";
       }
@@ -530,6 +544,7 @@
       elements.cameraStatus.textContent = "Prediction ready · Press Done";
       elements.cameraHelp.textContent = "راجع الكلمة. اضغط Done لإضافتها للجملة وبدء تسجيل الكلمة التالية.";
       elements.framingGuide.dataset.state = "ready";
+      elements.cameraStage.dataset.framing = "ready";
       elements.framingTitle.textContent = "Prediction ready";
       elements.framingMessage.textContent = "Review the word, then press Done to continue.";
     }
