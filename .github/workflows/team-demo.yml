@@ -1,0 +1,147 @@
+name: Start temporary Signova team demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: How long the temporary API should stay online
+        type: choice
+        required: true
+        default: "30"
+        options:
+          - "15"
+          - "30"
+          - "60"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signova-team-demo
+  cancel-in-progress: true
+
+jobs:
+  team-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out API, model, and one sample clip
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            requirements.txt
+            .devcontainer/setup.sh
+            .devcontainer/start-api.sh
+            signova_features.py
+            Signova_Frontend_DarkAI/app.py
+            New_dataset/dataset/models_combined_166
+            New_dataset/dataset/clean/videos/00623.mp4
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CPU-only API dependencies
+        run: bash .devcontainer/setup.sh
+
+      - name: Start API and wait for readiness
+        shell: bash
+        env:
+          CUDA_VISIBLE_DEVICES: ""
+          OMP_NUM_THREADS: "1"
+          TF_ENABLE_ONEDNN_OPTS: "0"
+          TF_NUM_INTEROP_THREADS: "1"
+          TF_NUM_INTRAOP_THREADS: "1"
+          SIGNOVA_CORS_ORIGINS: https://mtamer200915-droid.github.io
+        run: |
+          bash .devcontainer/start-api.sh
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:8000/health --output /tmp/signova-health.json; then
+              ready=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat /tmp/signova-api.log
+            exit 1
+          fi
+          cat /tmp/signova-health.json
+
+      - name: Start temporary Cloudflare link and verify the public API
+        shell: bash
+        run: |
+          set -euo pipefail
+          cloudflared_path="$RUNNER_TEMP/cloudflared"
+          curl --fail --silent --show-error --location \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            --output "$cloudflared_path"
+          chmod +x "$cloudflared_path"
+          "$cloudflared_path" tunnel --no-autoupdate --url http://127.0.0.1:8000 \
+            >/tmp/signova-cloudflared.log 2>&1 &
+          echo $! >/tmp/signova-cloudflared.pid
+
+          api_url=""
+          for attempt in $(seq 1 60); do
+            api_url=$(grep -oE 'https://[[:alnum:]-]+\.trycloudflare\.com' /tmp/signova-cloudflared.log | head -n 1 || true)
+            if [ -n "$api_url" ] && curl --silent --fail "$api_url/health" --output /tmp/signova-public-health.json; then
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "$api_url" ] || [ ! -s /tmp/signova-public-health.json ]; then
+            cat /tmp/signova-cloudflared.log
+            exit 1
+          fi
+
+          curl --silent --show-error --fail \
+            --form "file=@New_dataset/dataset/clean/videos/00623.mp4" \
+            "$api_url/api/predict" \
+            --output /tmp/signova-public-prediction.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path("/tmp/signova-public-prediction.json").read_text())
+          assert isinstance(result.get("word"), str) and result["word"].strip()
+          assert 0 <= result.get("confidence", -1) <= 100
+          print(f"Public API returned {result['word']!r} at {result['confidence']}% model score.")
+          PY
+
+          site_url="https://mtamer200915-droid.github.io/SignSpeak/?api=${api_url}"
+          echo "SIGNOVA_DEMO_API_URL=${api_url}" >> "$GITHUB_ENV"
+          echo "SIGNOVA_DEMO_SITE_URL=${site_url}" >> "$GITHUB_ENV"
+          {
+            echo "## Signova team demo is ready"
+            echo "- [Open the website connected to the live API](${site_url})"
+            echo "- API health: [${api_url}/health](${api_url}/health)"
+            echo "- This temporary demo runs for **${{ inputs.duration_minutes }} minutes** and then stops."
+            echo "- The API URL is public. Use demo clips only; do not send private recordings."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Signova team demo is ready::$site_url"
+
+      - name: Keep the demo available for the selected time
+        env:
+          DEMO_MINUTES: ${{ inputs.duration_minutes }}
+        run: sleep "$((DEMO_MINUTES * 60))"
+
+      - name: Stop the temporary API and tunnel
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/signova-cloudflared.pid ]; then
+            kill "$(cat /tmp/signova-cloudflared.pid)" 2>/dev/null || true
+          fi
+          if [ -f /tmp/signova-api.pid ]; then
+            kill "$(cat /tmp/signova-api.pid)" 2>/dev/null || true
+          fi
+
+      - name: Show server logs if startup or public access failed
+        if: failure()
+        run: |
+          cat /tmp/signova-api.log || true
+          cat /tmp/signova-cloudflared.log || true

@@ -69,21 +69,19 @@ The browser requires localhost or HTTPS for camera permission. The local develop
 
 The workflow in `.github/workflows/pages.yml` publishes only `index.html`, `style.css`, and `app.js`; it does not publish the video datasets or model files. On the repository's first Pages deployment, open **Settings → Pages** and select **GitHub Actions** as the publishing source. After the workflow succeeds, GitHub displays the team website URL in the deployment details. This repository's expected URL is `https://mtamer200915-droid.github.io/SignSpeak/`.
 
-GitHub Pages serves the website files only. It cannot run this Python API, and `127.0.0.1` on a teammate's browser points to that teammate's own device. The repository now includes a GitHub Codespaces setup for temporary remote team testing, so the API does not have to run on your Windows computer:
+GitHub Pages serves the website files only. It cannot run this Python API, and `127.0.0.1` on a teammate's browser points to that teammate's own device. To let the team test without running Python on your computer, start the temporary API demo from GitHub:
 
-1. On GitHub, open this repository, choose **Code → Codespaces → Create codespace on main**, and wait for setup to finish. The setup installs the CPU-only dependencies and starts the API on port 8000; the first start downloads the YOLO pose weights.
-2. In the Codespaces **Ports** panel, make port 8000 public and copy its HTTPS address. Anyone with the public address can reach this test API.
-3. Open the website with that API address appended, like this:
+1. Open [Actions → Start temporary Signova team demo](https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo.yml), click **Run workflow**, and choose how long to keep the demo online (15, 30, or 60 minutes).
+2. When setup and the public API check finish, open the workflow run summary and click **Open the website connected to the live API**. Share that page with the team.
+3. The demo stops automatically at the selected time. Cancel the workflow run to stop it sooner.
 
-```text
-https://mtamer200915-droid.github.io/SignSpeak/?api=https://YOUR-CODESPACE-8000.app.github.dev
-```
+GitHub-hosted standard runners are free and unlimited for public repositories. The workflow starts the API, tests the public prediction path, and publishes a temporary Cloudflare Quick Tunnel URL; Quick Tunnels are intended for testing, need no Cloudflare account, and stop when the process ends. The run also uses the shared `setup.sh` and `start-api.sh` scripts that the ordinary API smoke check verifies.
 
-Codespaces includes a monthly free quota for personal GitHub accounts (currently 120 hours on a 2-core machine and 15 GB-month storage for GitHub Free). The Codespace stops when idle or when you stop it, so the API is not always online; after restarting, check that port 8000 is public again. Usage beyond the free quota is blocked if there is no payment method on the account. The public API URL is not protected by login, so use it only for demo clips and stop the Codespace after testing.
+The demo link is public and has no login, so anyone who sees it can send a video. Use demo clips only; do not send private recordings. The tunnel address changes each time and has no uptime guarantee, so this is for temporary team testing, not a permanent server.
 
-The API smoke check has passed in GitHub's Linux runner, but this Codespaces deployment still needs to be started from the repository owner's GitHub account. The Windows application-control policy on the development computer blocks TensorFlow, which is why the model could not be run locally here. This hosting setup makes the app reachable to teammates; it does not improve model accuracy. The current 15.42% test accuracy is experimental and too low for dependable communication.
+GitHub Codespaces setup is also included for anyone who prefers to launch the API in a remote development environment. Its free personal-account quota is 120 hours on a 2-core machine and 15 GB-month storage for GitHub Free; the Codespace stops when idle. The temporary Actions demo above avoids using that quota.
 
-If another computer can run the API, a Cloudflare Quick Tunnel is an alternative temporary route. Set `SIGNOVA_CORS_ORIGINS` to `https://mtamer200915-droid.github.io`, expose port 8000 with `cloudflared tunnel --url http://127.0.0.1:8000`, and replace the example API address above with the HTTPS tunnel URL. Quick Tunnel links change and stop working when the tunnel process stops.
+The API smoke check has passed in GitHub's Linux runner, but launching the temporary Actions demo is still necessary before teammates can use a live API. The Windows application-control policy on the development computer blocks TensorFlow, which is why the model could not be run locally here. This hosting setup makes the app reachable to teammates; it does not improve model accuracy. The current 15.42% test accuracy is experimental and too low for dependable communication.
 
 The API limits videos to 50 MB by default (`SIGNOVA_MAX_UPLOAD_BYTES` can change this). Gemini verification sends the uploaded clip to Google when `GEMINI_API_KEY` is configured; without the key, only the local prediction is used.
 

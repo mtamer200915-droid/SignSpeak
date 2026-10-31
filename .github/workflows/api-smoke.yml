@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/api-smoke.yml
+      - .github/workflows/team-demo.yml
       - requirements.txt
       - .devcontainer/setup.sh
       - .devcontainer/start-api.sh
