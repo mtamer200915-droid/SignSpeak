@@ -106,6 +106,7 @@ jobs:
         shell: bash
         env:
           DEMO_MINUTES: ${{ inputs.duration_minutes }}
+          SIGNOVA_DEMO_EXPIRES_AT_FILE: /tmp/signova-demo-expires-at
         run: |
           set -euo pipefail
           cloudflared_path="$RUNNER_TEMP/cloudflared"
