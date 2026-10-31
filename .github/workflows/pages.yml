@@ -36,17 +36,23 @@ jobs:
             signova_features.py
             Signova_Frontend_DarkAI/app.py
             Signova_Frontend_DarkAI/pose_infer.py
+            Version 2 - Site Nova/web/**
+            Version 2 - Site Nova/api/app.py
           sparse-checkout-cone-mode: false
 
       - name: Check application syntax
         run: |
           node --check app.js
+          node --check "Version 2 - Site Nova/web/app.js"
           python3 -m py_compile SignNova_Complete.py predict.py signova_features.py Signova_Frontend_DarkAI/app.py Signova_Frontend_DarkAI/pose_infer.py
+          python3 -m py_compile "Version 2 - Site Nova/api/app.py"
 
       - name: Prepare static website
         run: |
           mkdir site
           cp index.html style.css framing.css app.js site/
+          mkdir -p site/v2
+          cp -R "Version 2 - Site Nova/web/." site/v2/
           touch site/.nojekyll
 
       - name: Upload website artifact

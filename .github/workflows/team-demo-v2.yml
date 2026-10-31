@@ -1,0 +1,202 @@
+name: Start temporary Signova V2 team demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: How long the shared Signova V2 demo stays online
+        type: choice
+        required: true
+        default: "315"
+        options:
+          - "15"
+          - "30"
+          - "60"
+          - "180"
+          - "315"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signova-v2-team-demo
+  cancel-in-progress: true
+
+jobs:
+  team-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Check out the V2 API and trained model
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            Version 2 - Site Nova/api/app.py
+            Version 2 - Site Nova/api/requirements.txt
+            Version 2 - Site Nova/api/models/signova_v2.keras
+            Version 2 - Site Nova/api/models/class_names.json
+            Version 2 - Site Nova/api/models/model_info.json
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: Version 2 - Site Nova/api/requirements.txt
+
+      - name: Install the CPU-only prediction API
+        run: python -m pip install -r "Version 2 - Site Nova/api/requirements.txt"
+
+      - name: Start API and wait for the model
+        shell: bash
+        env:
+          CUDA_VISIBLE_DEVICES: ""
+          OMP_NUM_THREADS: "1"
+          TF_ENABLE_ONEDNN_OPTS: "0"
+          TF_NUM_INTEROP_THREADS: "1"
+          TF_NUM_INTRAOP_THREADS: "1"
+        run: |
+          set -euo pipefail
+          cat >/tmp/signova-v2-supervisor.sh <<'SH'
+          #!/usr/bin/env bash
+          set +e
+          while [ ! -f /tmp/signova-v2-stop ]; do
+            python -m uvicorn app:app --app-dir "Version 2 - Site Nova/api" --host 0.0.0.0 --port 8000 --workers 1 >>/tmp/signova-v2-api.log 2>&1
+            status=$?
+            if [ -f /tmp/signova-v2-stop ]; then break; fi
+            echo "Signova V2 API exited with status $status; restarting in 3 seconds." >>/tmp/signova-v2-api.log
+            sleep 3
+          done
+          SH
+          chmod +x /tmp/signova-v2-supervisor.sh
+          nohup bash /tmp/signova-v2-supervisor.sh >/tmp/signova-v2-supervisor.log 2>&1 </dev/null &
+          echo $! >/tmp/signova-v2-api.pid
+          ready=0
+          for attempt in $(seq 1 72); do
+            if curl --silent --fail http://127.0.0.1:8000/health --output /tmp/signova-v2-health.json; then
+              ready=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat /tmp/signova-v2-api.log
+            exit 1
+          fi
+          cat /tmp/signova-v2-health.json
+
+      - name: Check a video upload through the local API
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess
+          import imageio_ffmpeg
+          ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+          subprocess.run([
+              ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+              "-i", "color=c=black:s=320x240:r=8:d=2", "-an", "-pix_fmt", "yuv420p",
+              "-y", "/tmp/signova-v2-smoke.mp4"
+          ], check=True)
+          PY
+          curl --silent --show-error --fail \
+            --form "file=@/tmp/signova-v2-smoke.mp4;filename=smoke.mp4" \
+            http://127.0.0.1:8000/api/predict --output /tmp/signova-v2-prediction.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          health = json.loads(Path("/tmp/signova-v2-health.json").read_text())
+          result = json.loads(Path("/tmp/signova-v2-prediction.json").read_text())
+          assert result.get("word") in health.get("classes", [])
+          assert 0 <= result.get("confidence", -1) <= 100
+          assert isinstance(result.get("suggestions"), list) and result["suggestions"]
+          print(f"Upload/prediction smoke check returned {result['word']!r}.")
+          print("This checks API wiring only; it does not measure sign accuracy.")
+          PY
+
+      - name: Start the temporary public link and verify it
+        shell: bash
+        env:
+          DEMO_MINUTES: ${{ inputs.duration_minutes }}
+        run: |
+          set -euo pipefail
+          cloudflared_path="$RUNNER_TEMP/cloudflared"
+          curl --fail --silent --show-error --location \
+            --retry 8 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 120 \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            --output "$cloudflared_path"
+          chmod +x "$cloudflared_path"
+          "$cloudflared_path" tunnel --no-autoupdate --url http://127.0.0.1:8000 \
+            >/tmp/signova-v2-cloudflared.log 2>&1 &
+          echo $! >/tmp/signova-v2-cloudflared.pid
+
+          api_url=""
+          for attempt in $(seq 1 60); do
+            api_url=$(grep -oE 'https://[[:alnum:]-]+\.trycloudflare\.com' /tmp/signova-v2-cloudflared.log | head -n 1 || true)
+            if [ -n "$api_url" ] && curl --silent --fail "$api_url/health" --output /tmp/signova-v2-public-health.json; then
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "$api_url" ] || [ ! -s /tmp/signova-v2-public-health.json ]; then
+            cat /tmp/signova-v2-cloudflared.log
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          health = json.loads(Path("/tmp/signova-v2-public-health.json").read_text())
+          assert health.get("status") == "ok" and health.get("model_version") == "v2"
+          print("Public V2 API health check succeeded.")
+          PY
+
+          expires_at=$(date -u -d "+${DEMO_MINUTES} minutes" +%s)
+          echo "$expires_at" >/tmp/signova-v2-expires-at
+          site_url="https://mtamer200915-droid.github.io/SignSpeak/v2/?api=${api_url}"
+          {
+            echo "## Signova V2 demo is ready"
+            echo "- [Open the V2 website connected to the live API](${site_url})"
+            echo "- API health: [${api_url}/health](${api_url}/health)"
+            echo "- This shared API stays online for **${DEMO_MINUTES} minutes** after the public check."
+            echo "- Supported labels: book, deaf, eat, drink, family, go, happy, help, home, like, mother, need, no, not, please, school, water, want, yes, you."
+            echo "- The upload smoke check verifies wiring only; the independent accuracy result is listed on the site."
+            echo "- The temporary API URL is public. Use demo clips only."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Connected website: ${site_url}"
+          echo "SIGNOVA_V2_DEMO_API_URL=${api_url}" >> "$GITHUB_ENV"
+          echo "SIGNOVA_V2_DEMO_EXPIRES_AT=${expires_at}" >> "$GITHUB_ENV"
+
+      - name: Keep the shared API available for the selected time
+        shell: bash
+        run: |
+          expires_at="${SIGNOVA_V2_DEMO_EXPIRES_AT:-}"
+          if [ -z "$expires_at" ]; then
+            echo "The Signova V2 demo expiry time was not set."
+            exit 1
+          fi
+          remaining=$((expires_at - $(date +%s)))
+          if [ "$remaining" -le 0 ]; then
+            echo "The selected demo duration expired before readiness completed."
+            exit 1
+          fi
+          sleep "$remaining"
+
+      - name: Stop the V2 API and tunnel
+        if: always()
+        shell: bash
+        run: |
+          touch /tmp/signova-v2-stop
+          if [ -f /tmp/signova-v2-cloudflared.pid ]; then
+            kill "$(cat /tmp/signova-v2-cloudflared.pid)" 2>/dev/null || true
+          fi
+          if [ -f /tmp/signova-v2-api.pid ]; then
+            kill "$(cat /tmp/signova-v2-api.pid)" 2>/dev/null || true
+          fi
+
+      - name: Show logs if API startup or public access failed
+        if: failure()
+        run: |
+          cat /tmp/signova-v2-api.log || true
+          cat /tmp/signova-v2-cloudflared.log || true

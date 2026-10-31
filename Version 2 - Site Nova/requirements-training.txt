@@ -1,0 +1,2 @@
+-r api/requirements.txt
+yt-dlp==2026.10.26

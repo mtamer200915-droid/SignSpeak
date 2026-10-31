@@ -1,0 +1,7 @@
+.tools/
+.downloads/
+data/raw/
+data/*_features.npz
+data/preparation_report.json
+__pycache__/
+*.py[cod]
