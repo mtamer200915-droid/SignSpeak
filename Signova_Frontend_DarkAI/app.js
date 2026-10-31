@@ -163,7 +163,7 @@
     recorder.onstop = async () => {
       if (mediaRecorder === recorder) mediaRecorder = null;
       if (recordedChunks.length === 0) {
-        toast("لم يتم تسجيل بيانات كافية.");
+        toast("Not enough data was recorded.");
         if (state.stream) setupMediaRecorder();
         return;
       }
@@ -176,7 +176,7 @@
         const file = new File([blob], `signova_gesture.${extension}`, { type: mimeType });
         await sendVideoFileToBackend(file);
       } else {
-        toast("لم يتم تسجيل بيانات كافية. جرّب تسجيل الإشارة مرة أخرى.");
+        toast("Not enough data was recorded. Try recording the sign again.");
         if (state.stream) setupMediaRecorder();
       }
     };
@@ -189,9 +189,9 @@
       return false;
     }
     elements.cameraStatus.textContent = "Recording gesture...";
-    elements.cameraHelp.textContent = "جاري تسجيل إشارتك... اضغط Stop عند الانتهاء.";
+    elements.cameraHelp.textContent = "Recording your sign... Press Stop when you are done.";
     elements.stopCamera.disabled = false;
-    toast("بدء تسجيل الحركة...");
+    toast("Sign recording started...");
     return true;
   }
 
@@ -200,9 +200,9 @@
       mediaRecorder.stop();
       elements.stopCamera.disabled = true;
       elements.cameraStatus.textContent = "Analyzing sign...";
-      elements.cameraHelp.textContent = "جاري تحليل الكلمة. راجع التوقع ثم اضغط Done لإضافتها وبدء الكلمة التالية.";
+      elements.cameraHelp.textContent = "Analyzing the word. Review the prediction, then press Done to add it and start the next word.";
       elements.addWord.disabled = true;
-      toast("تم إيقاف التسجيل وجاري تحليل الكلمة...");
+      toast("Recording stopped. Analyzing the word...");
     }
   }
 
@@ -232,12 +232,12 @@
   elements.cameraOff.addEventListener("click", turnCameraOff);
   $("#flipHint").addEventListener("click", () => toast("Tip: keep both hands visible and use steady lighting."));
 
-  // ==================== ربط الباك إيند و Gemini ====================
+  // Backend API request and optional Gemini second opinion.
   async function sendVideoFileToBackend(videoFile) {
     const formData = new FormData();
     formData.append("file", videoFile, videoFile.name || "signova-upload.webm");
 
-    elements.sentenceFeedback.textContent = "جاري تحليل الإشارة بواسطة نموذج الذكاء الاصطناعي...";
+    elements.sentenceFeedback.textContent = "Analyzing the sign with the AI model...";
     elements.addWord.disabled = true;
 
     try {
@@ -247,24 +247,24 @@
       });
 
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.detail || "فشل الاتصال بالخادم.");
+      if (!response.ok) throw new Error(result.detail || "Could not connect to the server.");
 
       if (result && result.word) {
         showRealPrediction({
           word: result.word,
           confidence: Number.isFinite(result.confidence) ? result.confidence : 0,
-          description: "نتيجة من نموذج Signova التجريبي (166 فئة)"
+          description: "Result from the Signova experimental model (166 classes)"
         });
 
-        toast(`تم التعرف: ${result.word}`);
+        toast(`Recognized: ${result.word}`);
       } else {
-        throw new Error("لم يرجع الخادم كلمة متوقعة. جرّب تسجيل الإشارة مرة أخرى.");
+        throw new Error("The server returned no predicted word. Try recording the sign again.");
       }
 
     } catch (error) {
       console.error("Backend connection error:", error);
-      elements.sentenceFeedback.textContent = `${error.message} تأكد من تشغيل backend وإتاحة عنوانه للمتصفح.`;
-      toast("تعذر تحليل الفيديو.");
+      elements.sentenceFeedback.textContent = `${error.message} Make sure the backend is running and reachable from the browser.`;
+      toast("The video could not be analyzed.");
       if (state.stream && !mediaRecorder) setupMediaRecorder();
     }
   }
@@ -279,7 +279,7 @@
     elements.addWord.disabled = false;
     if (state.stream) {
       elements.cameraStatus.textContent = "Prediction ready · Press Done";
-      elements.cameraHelp.textContent = "راجع الكلمة. اضغط Done لإضافتها للجملة وبدء تسجيل الكلمة التالية.";
+      elements.cameraHelp.textContent = "Review the word. Press Done to add it to the sentence and start recording the next word.";
     }
   }
 

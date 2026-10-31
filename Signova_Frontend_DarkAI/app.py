@@ -50,7 +50,7 @@ app.add_middleware(
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY and genai else None
 
-# المسارات والملفات الأساسية للنموذج المحلي
+# Paths and core files for the local model
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 NEW_ROOT = PROJECT_ROOT / "New_dataset" / "dataset"
 MODELS_DIR = NEW_ROOT / "models_combined_166"
@@ -289,7 +289,7 @@ async def predict_frame_sequence(file: UploadFile = File(...)):
             except Exception as e:
                 print(f"Warning: Could not delete temp file: {e}")
 
-        # تنظيف ملف الفيديو من سحابة جوجل
+        # Delete the temporary video from Gemini storage
         if video_file_ref is not None and client is not None:
             try:
                 client.files.delete(name=video_file_ref.name)
