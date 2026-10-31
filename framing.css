@@ -1,0 +1,18 @@
+.camera-stage video{object-fit:contain}
+.camera-stage[data-facing="environment"] video{transform:none}
+.framing-guide{display:none;position:absolute;z-index:5;left:12px;right:12px;bottom:12px;align-items:center;gap:10px;padding:11px 13px;border:1px solid #53627c;border-radius:10px;background:#0c1423ed;box-shadow:0 8px 25px #0006;backdrop-filter:blur(10px)}
+.camera-stage.camera-on .framing-guide{display:flex}
+.framing-indicator{width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:#d8aa5d;box-shadow:0 0 0 4px #d8aa5d20}
+.framing-guide strong{display:block;color:#eaf0ff;font-size:10px}
+.framing-guide p{margin:3px 0 0;color:#abb8ce;font-size:9px;line-height:1.5}
+.framing-guide[data-state="ready"]{border-color:#3c997c}
+.framing-guide[data-state="ready"] .framing-indicator{background:#58e5bb;box-shadow:0 0 0 4px #58e5bb20}
+.framing-guide[data-state="adjust"]{border-color:#a66f58}
+.framing-guide[data-state="adjust"] .framing-indicator{background:#ff9c75;box-shadow:0 0 0 4px #ff9c7520}
+.framing-guide[data-state="manual"]{border-color:#8a744a}
+.camera-stage[data-framing="ready"] .corner{border-color:#58e5bb}
+.camera-stage[data-framing="adjust"] .corner{border-color:#ff9c75}
+.integration-panel p a{color:#aabaff;text-decoration:underline;text-underline-offset:2px}
+.api-help{font-size:9px;color:#74839d;line-height:1.7;margin:8px 0 0}
+.api-help a{color:#aabaff;text-decoration:underline;text-underline-offset:2px}
+@media(max-width:560px){.camera-controls .icon-btn{margin-left:0}.framing-guide{left:8px;right:8px;bottom:8px;padding:9px 10px}}

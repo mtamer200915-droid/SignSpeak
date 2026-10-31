@@ -28,6 +28,7 @@ jobs:
           fetch-depth: 1
           sparse-checkout: |
             app.js
+            framing.css
             index.html
             style.css
             SignNova_Complete.py
@@ -44,7 +45,7 @@ jobs:
       - name: Prepare static website
         run: |
           mkdir site
-          cp index.html style.css app.js site/
+          cp index.html style.css framing.css app.js site/
           touch site/.nojekyll
 
       - name: Upload website artifact

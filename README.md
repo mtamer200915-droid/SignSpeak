@@ -61,13 +61,13 @@ Serve the frontend from another terminal in the repository root:
 python -m http.server 5500
 ```
 
-Open `http://localhost:5500`. In **Translator**, allow camera access, record one sign for a few seconds, then press **Stop**. The preview is live, but recognition runs after the clip is sent to the API. The API samples 30 frames, extracts pose landmarks, and runs the local model. The frontend also accepts uploaded sign videos.
+Open `http://localhost:5500`. In **Translator**, allow camera access and wait for the in-browser guide to show that your face and shoulders are centered. Press **Start sign**, perform one word, then press **Stop & predict**. The guide uses MediaPipe Pose Landmarker in the browser; the live preview is not uploaded, and the clip is sent to the API only after recording stops. You can switch between front and rear cameras while not recording. The API samples 30 frames, extracts pose landmarks, and runs the local model. The frontend also accepts uploaded sign videos.
 
 The browser requires localhost or HTTPS for camera permission. The local development default is `http://127.0.0.1:8000`.
 
 ## Share the website with the team
 
-The workflow in `.github/workflows/pages.yml` publishes only `index.html`, `style.css`, and `app.js`; it does not publish the video datasets or model files. On the repository's first Pages deployment, open **Settings → Pages** and select **GitHub Actions** as the publishing source. After the workflow succeeds, GitHub displays the team website URL in the deployment details. This repository's expected URL is `https://mtamer200915-droid.github.io/SignSpeak/`.
+The workflow in `.github/workflows/pages.yml` publishes the static website files, including `framing.css`; it does not publish the video datasets or model files. On the repository's first Pages deployment, open **Settings → Pages** and select **GitHub Actions** as the publishing source. After the workflow succeeds, GitHub displays the team website URL in the deployment details. This repository's expected URL is `https://mtamer200915-droid.github.io/SignSpeak/`.
 
 GitHub Pages serves the website files only. It cannot run this Python API, and `127.0.0.1` on a teammate's browser points to that teammate's own device. To let the team test without running Python on your computer, start the temporary API demo from GitHub:
 
