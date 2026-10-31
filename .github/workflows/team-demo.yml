@@ -151,6 +151,8 @@ jobs:
           echo "SIGNOVA_DEMO_EXPIRES_AT=$expires_at" >> "$GITHUB_ENV"
 
           site_url="https://mtamer200915-droid.github.io/SignSpeak/?api=${api_url}"
+          echo "Connected website: ${site_url}"
+          echo "API health: ${api_url}/health"
           echo "SIGNOVA_DEMO_API_URL=${api_url}" >> "$GITHUB_ENV"
           echo "SIGNOVA_DEMO_SITE_URL=${site_url}" >> "$GITHUB_ENV"
           {

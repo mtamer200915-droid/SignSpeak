@@ -90,10 +90,10 @@ The API is public so the team can use it without separate accounts. Use demonstr
 
 The workflow in `.github/workflows/pages.yml` publishes the static website files, including `framing.css`; it does not publish the video datasets or model files. On the repository's first Pages deployment, open **Settings → Pages** and select **GitHub Actions** as the publishing source. After the workflow succeeds, GitHub displays the team website URL in the deployment details. This repository's expected URL is `https://mtamer200915-droid.github.io/SignSpeak/`.
 
-For this free temporary team demo, use the connected link from the GitHub Actions / Cloudflare Quick Tunnel run summary. The optional Cloud Run route above provides a stable link but requires a Google Cloud billing account and can incur charges.
+For this free temporary team demo, use the connected link from the GitHub Actions / Cloudflare Quick Tunnel job. The optional Cloud Run route above provides a stable link but requires a Google Cloud billing account and can incur charges.
 
 1. Open [Actions → Start temporary Signova team demo](https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo.yml), click **Run workflow**, and choose a shared session (15, 30, 60, 180, or 315 minutes).
-2. When setup and the public API check finish, open the workflow run summary and click **Open the website connected to the live API**. Share that page with the team.
+2. When setup and the public API check finish, open the `team-demo` job and expand **Start temporary Cloudflare link and verify the public API** (step 6). Copy the `Connected website:` URL from its log. The run summary also contains **Open the website connected to the live API** after the job finishes; GitHub uploads job summaries only after each job ends.
 3. The demo stops automatically at the selected time. Cancel the workflow run to stop it sooner.
 
 This temporary route uses a public GitHub Actions runner and a random Cloudflare Quick Tunnel URL. The supervisor restarts the Python API automatically if it crashes during the chosen run, and the interface warns in the final 15 seconds. It still stops at the selected duration or runner limit; after that, the old tunnel address cannot be recovered by the browser. Use Cloud Run when you want automatic wake-up later from the same stable link.
