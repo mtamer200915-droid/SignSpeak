@@ -58,6 +58,13 @@
       if (health.status !== "ok" || !health.model_loaded || health.classes !== 166) {
         throw new Error("Model is not ready");
       }
+      const testAccuracy = Number(health.test_accuracy);
+      if (Number.isFinite(testAccuracy) && testAccuracy < 0.20) {
+        elements.apiStatus.textContent = `Model loaded · low test accuracy (${(testAccuracy * 100).toFixed(1)}%)`;
+        elements.apiStatus.classList.remove("ready");
+        elements.apiStatus.classList.add("error");
+        return;
+      }
       elements.apiStatus.textContent = "API and 166-class model ready";
       elements.apiStatus.classList.remove("error");
       elements.apiStatus.classList.add("ready");

@@ -100,6 +100,8 @@ async def health():
         "status": "ok",
         "model_loaded": True,
         "classes": len(classes),
+        "test_accuracy": float(training_report.get("test_accuracy", 0.0)),
+        "test_balanced_accuracy": float(training_report.get("test_balanced_accuracy", 0.0)),
         "pose_weights": POSE_WEIGHTS.name if POSE_WEIGHTS_OVERRIDE else "yolov8n-pose.pt",
         "gemini_enabled": client is not None,
     }

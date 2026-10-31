@@ -37,6 +37,8 @@ The run requires all 166 classes and at least two usable training clips per clas
 
 The current checked-in bundle was retrained on GitHub Actions from the official WLASL splits for 49 epochs. It reports 15.42% test accuracy, 16.30% balanced test accuracy, and 13.78% macro F1 on 201 test videos covering 138 of 166 classes; the majority-class baseline is 1.49%. The model and class map now match. This is a substantial improvement over the previous 0.50% result, but it is still experimental and far below accuracy suitable for dependable communication.
 
+The Linux API smoke check confirms that the model loads, downloads YOLO pose weights, accepts a video, and returns a prediction. It does not establish that the prediction is correct: on video `00623`, whose training label is `accident`, the API returned `student` with a 40.06% model score. The frontend labels this value as a model score and warns users to verify each word.
+
 Training now keeps the existing model files unless validation accuracy, test accuracy, and balanced test accuracy each reach at least 10%. This is a minimum quality gate to reject near-random models, not a claim that 10% is good enough for real communication. `--min-accuracy` can raise the gate; it should not be lowered to force a weak model into use.
 
 The public repository also has a Linux GitHub Actions training workflow. It runs when the training code or tracked feature data changes, and commits the model, class mapping, and report only when the quality gate passes. It can also be started from the Actions tab. Standard GitHub-hosted runners are free for public repositories; this does not keep the prediction API online.
