@@ -41,6 +41,6 @@ In a second terminal, serve the website with `python -m http.server 8080 --direc
 
 ## GitHub Pages and temporary API
 
-The Pages workflow publishes V2 at `/v2/`. Start **Start temporary Signova V2 team demo** from GitHub Actions, then use the connected website link in its run summary. The API exists only while that Actions job is active; everyone using that link shares the same session and timer. Starting another V2 demo while one is already running leaves the active session online; reuse its connected website link instead of starting another run.
+The Pages workflow publishes V2 at `/v2/`. Start **Start temporary Signova V2 team demo** from GitHub Actions, then expand **Start the temporary public link and verify it** in that run's `team-demo` job and open the `Connected website:` URL from its log. The API exists only while that Actions job is active; everyone using that link shares the same session and timer. Starting another V2 demo while one is already running leaves the active session online; reuse its connected website link instead of starting another run.
 
 The automated smoke check verifies that the public API can decode a short video and return a model response. It does not measure sign-recognition accuracy. See `api/models/model_info.json` for the independent offline evaluation.
