@@ -2,7 +2,7 @@
 
 Signova V2 is a separate, 20-word ASL video-recognition demo. The original Signova website and API remain in the repository root. V2 labels are **book**, **deaf**, **eat**, **drink**, **family**, **go**, **happy**, **help**, **home**, **like**, **mother**, **need**, **no**, **not**, **please**, **school**, **water**, **want**, **yes**, and **you**.
 
-The model uses RGB video frames, a frozen ImageNet MobileNetV2 encoder, and a small bidirectional GRU classifier. It returns three candidate words so the user can review the result. This is an experimental isolated-sign classifier, not continuous sign-language translation, and it does not promise perfect accuracy.
+The model uses RGB video frames, a frozen ImageNet MobileNetV2 encoder, and a temporal Conv1D classifier. It returns three candidate words so the user can review the result. This is an experimental isolated-sign classifier, not continuous sign-language translation, and it does not promise perfect accuracy.
 
 ## Dataset and attribution
 
@@ -11,6 +11,8 @@ The data manifest selects source clips from **MS-ASL** and adds locally availabl
 Short signer-cropped clips are included in `data/clips/` with the dataset-specific C-UDA copies in `data/licenses/`. Untrimmed originals and temporary downloads stay in ignored local folders. `data/manifest.jsonl` records the selected source IDs, URLs, labels, and timings; `prepare_data.py` can re-fetch clips from those sources. Follow the dataset terms and attribution when using or redistributing the data. Read the [MS-ASL download page](https://www.microsoft.com/en-us/download/details.aspx?id=100121), the [WLASL dataset page](https://github.com/dxli94/WLASL), and Microsoft's [C-UDA terms](https://github.com/microsoft/Computational-Use-of-Data-Agreement).
 
 ## Prepare and train
+
+The checkout includes 736 usable clips: 533 train, 121 validation, and 82 test. Another 416 of the 1,152 manifest candidates are unavailable locally. The training script requires at least 18 clips per word, but some test classes have only one or two examples. The current held-out report is 25.6% top-1 and 48.8% top-3 accuracy across 82 clips, so the model remains experimental and is not dependable yet.
 
 The selected, signer-cropped train/validation/test clips are included in `data/clips/`, so the delivered model can be retrained without downloading the full source archives. From this directory, install the Python dependencies and train:
 
@@ -39,6 +41,6 @@ In a second terminal, serve the website with `python -m http.server 8080 --direc
 
 ## GitHub Pages and temporary API
 
-The Pages workflow publishes V2 at `/v2/`. Start **Start temporary Signova V2 team demo** from GitHub Actions, then use the connected website link in its run summary. The API exists only while that Actions job is active; everyone using that link shares the same session and timer.
+The Pages workflow publishes V2 at `/v2/`. Start **Start temporary Signova V2 team demo** from GitHub Actions, then use the connected website link in its run summary. The API exists only while that Actions job is active; everyone using that link shares the same session and timer. Starting another V2 demo while one is already running leaves the active session online; reuse its connected website link instead of starting another run.
 
 The automated smoke check verifies that the public API can decode a short video and return a model response. It does not measure sign-recognition accuracy. See `api/models/model_info.json` for the independent offline evaluation.

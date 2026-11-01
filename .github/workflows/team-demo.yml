@@ -20,7 +20,8 @@ permissions:
 
 concurrency:
   group: signova-team-demo
-  cancel-in-progress: true
+  # Keep an active shared demo alive if another run is dispatched by mistake.
+  cancel-in-progress: false
 
 jobs:
   team-demo:

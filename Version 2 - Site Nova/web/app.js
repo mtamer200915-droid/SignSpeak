@@ -154,7 +154,7 @@
     if (apiAddressMissing) {
       elements.apiExpiryNotice.hidden = false;
       elements.apiExpiryNotice.classList.remove("expired");
-      setText(elements.apiExpiryMessage, "This page has no API address. Open the connected website link in step 6 of the latest Team Demo run.");
+      setText(elements.apiExpiryMessage, "This page has no API address. Open the connected website link in step 6 of the latest Signova V2 Team Demo run.");
       return;
     }
     const secondsLeft = demoExpiresAt === null ? null : Math.ceil((demoExpiresAt - Date.now()) / 1000);
@@ -674,15 +674,15 @@
       state.isAnalyzing = false;
       elements.addWord.disabled = true;
       elements.flipCamera.disabled = !state.stream;
-      setEnglishText(elements.sentenceFeedback, "This page has no connected API address. Open the connected website link in step 6 of the latest Team Demo run.");
+      setEnglishText(elements.sentenceFeedback, "This page has no connected API address. Open the connected website link in step 6 of the latest Signova V2 Team Demo run.");
       elements.startSign.disabled = !state.stream || (!state.isFramingReady && !state.manualPoseFallback);
       if (state.stream) {
         setEnglishText(elements.cameraStatus, "Prediction API offline");
-        setEnglishText(elements.cameraHelp, "The recording is ready, but this page has no API address. Open the connected website link in step 6 of the Team Demo run.");
+        setEnglishText(elements.cameraHelp, "The recording is ready, but this page has no API address. Open the connected website link in step 6 of the Signova V2 Team Demo run.");
         elements.framingGuide.dataset.state = "manual";
         elements.cameraStage.dataset.framing = "manual";
         setEnglishText(elements.framingTitle, "Prediction API offline");
-        setEnglishText(elements.framingMessage, "Your recording could not be sent. Open the connected website link in step 6 of the Team Demo run.");
+        setEnglishText(elements.framingMessage, "Your recording could not be sent. Open the connected website link in step 6 of the Signova V2 Team Demo run.");
       }
       toast("No connected prediction API address.");
       return;
