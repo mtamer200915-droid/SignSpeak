@@ -65,13 +65,14 @@ def startup() -> None:
 
 
 def decode_frames(path: Path) -> np.ndarray:
+    # Keep this preprocessing aligned with train_model.extract_frames().
     crop = "crop='min(iw,ih)':'min(iw,ih)':'(iw-ow)/2':'(ih-oh)/2'"
     vf = (
-        f"{crop},scale={SIZE}:{SIZE}:force_original_aspect_ratio=decrease,"
-        f"pad={SIZE}:{SIZE}:(ow-iw)/2:(oh-ih)/2,fps={SAMPLE_FPS}"
+        f"{crop},fps={SAMPLE_FPS},scale={SIZE}:{SIZE}:force_original_aspect_ratio=decrease,"
+        f"pad={SIZE}:{SIZE}:(ow-iw)/2:(oh-ih)/2"
     )
     command = [
-        get_ffmpeg(), "-hide_banner", "-loglevel", "error", "-i", str(path), "-t", "10",
+        get_ffmpeg(), "-hide_banner", "-loglevel", "error", "-i", str(path), "-t", "6",
         "-an", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1",
     ]
     try:
