@@ -38,6 +38,9 @@ jobs:
             Version 2 - Site Nova/api/models/signova_v2.keras
             Version 2 - Site Nova/api/models/class_names.json
             Version 2 - Site Nova/api/models/model_info.json
+            Version 2 - Site Nova/api/models/signova_characters.keras
+            Version 2 - Site Nova/api/models/character_class_names.json
+            Version 2 - Site Nova/api/models/character_model_info.json
           sparse-checkout-cone-mode: false
 
       - name: Set up Python
@@ -116,6 +119,49 @@ jobs:
           print(f"Upload/prediction smoke check returned {result['word']!r}.")
           print("This checks API wiring only; it does not measure sign accuracy.")
           PY
+          character_ready=$(python -c 'import json; from pathlib import Path; data=json.loads(Path("/tmp/signova-v2-health.json").read_text()); print(str(data.get("available_modes", {}).get("characters", {}).get("model_loaded", False)).lower())')
+          if [ "$character_ready" = "true" ]; then
+            imageio_ffmpeg_bin=$(python - <<'PY'
+          import imageio_ffmpeg
+          print(imageio_ffmpeg.get_ffmpeg_exe())
+          PY
+          )
+            "$imageio_ffmpeg_bin" -hide_banner -loglevel error -f lavfi \
+              -i color=c=gray:s=320x320 -frames:v 1 -y /tmp/signova-character-smoke.jpg
+            curl --silent --show-error --fail \
+              --form "file=@/tmp/signova-character-smoke.jpg;filename=smoke.jpg;type=image/jpeg" \
+              --form "mode=characters" \
+              http://127.0.0.1:8000/api/predict --output /tmp/signova-character-prediction.json
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          health = json.loads(Path("/tmp/signova-v2-health.json").read_text())
+          result = json.loads(Path("/tmp/signova-character-prediction.json").read_text())
+          classes = health["available_modes"]["characters"]["classes"]
+          assert result.get("word") in classes
+          assert result.get("prediction_mode") == "characters"
+          print(f"Character image smoke check returned {result['word']!r}.")
+          PY
+          else
+            printf 'model-not-ready-smoke' >/tmp/signova-character-smoke.jpg
+            character_status=$(curl --silent --show-error --output /tmp/signova-character-unavailable.json \
+              --write-out '%{http_code}' \
+              --form "file=@/tmp/signova-character-smoke.jpg;filename=smoke.jpg;type=image/jpeg" \
+              --form "mode=characters" \
+              http://127.0.0.1:8000/api/predict)
+            if [ "$character_status" != "503" ]; then
+              cat /tmp/signova-character-unavailable.json
+              echo "Expected an explicit 503 while the character model is unavailable; got $character_status."
+              exit 1
+            fi
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path("/tmp/signova-character-unavailable.json").read_text())
+          assert "not trained or installed" in result.get("detail", "")
+          print("Character-photo route correctly reports the missing model without falling back to words.")
+          PY
+          fi
 
       - name: Start the temporary public link and verify it
         shell: bash
@@ -151,6 +197,9 @@ jobs:
           health = json.loads(Path("/tmp/signova-v2-public-health.json").read_text())
           assert health.get("status") == "ok" and health.get("model_version") == "v2"
           print("Public V2 API health check succeeded.")
+          modes = health.get("available_modes", {})
+          print(f"Word model loaded: {modes.get('words', {}).get('model_loaded', False)}")
+          print(f"Character model loaded: {modes.get('characters', {}).get('model_loaded', False)}")
           PY
 
           expires_at=$(date -u -d "+${DEMO_MINUTES} minutes" +%s)

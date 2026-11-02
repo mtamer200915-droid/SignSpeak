@@ -4,6 +4,8 @@ Signova V2 is a separate, 20-word ASL video-recognition demo. The original Signo
 
 The model uses RGB video frames, a frozen ImageNet MobileNetV2 encoder, and a temporal Conv1D classifier. It returns three candidate words so the user can review the result. This is an experimental isolated-sign classifier, not continuous sign-language translation, and it does not promise perfect accuracy.
 
+The translator automatically sends a photo to the letters-and-numbers model and a video to the word model. Both use the same FastAPI service and API address. The character model is optional: it is loaded only when its model, `character_class_names.json`, and `character_model_info.json` form a valid matching bundle. If that optional model is missing or invalid, word predictions remain available and the API reports the character model as unavailable. A character can be submitted from a JPG/PNG upload or captured with the camera's **Take photo** button. ASL letter O and numeral 0 share the same static handshape, so language context is needed to distinguish those meanings reliably.
+
 ## Dataset and attribution
 
 The data manifest selects source clips from **MS-ASL** and adds locally available WLASL training clips when supplied. MS-ASL provides separate train, validation, and test partitions. The preparation script removes source-video overlap across those partitions. It downloads each selected source locally and crops the annotated sign segment and signer region.
@@ -23,6 +25,18 @@ python train_model.py
 
 Training writes `api/models/signova_v2.keras`, `api/models/class_names.json`, `api/models/model_info.json`, and the website's `web/model-report.json`. The report contains the actual sample counts, held-out top-1/top-3 accuracy, per-class accuracy, and confusion matrix. The held-out test split is not used for early stopping.
 
+### Train the letters-and-numbers model
+
+The supplied image archives can be used to train a separate 40-label ASL character model (A–Z, 0–9, space, delete, nothing, and unknown). The script reads the two ZIP files directly and extracts a balanced sample of up to 2,000 unique images per label into train, validation, and test splits under the ignored `.downloads/character-training/` directory; it does not add the image archives or extracted images to Git. Expect several gigabytes of temporary disk use. Keep the word model files unchanged.
+
+The supplied archives did not include a license/readme file. Check the original dataset pages and their redistribution terms before publishing derived data or model weights publicly.
+
+```powershell
+python train_character_model.py --alphabet-zip "G:\archive (1).zip" --digits-zip "G:\archive (2).zip"
+```
+
+This writes `api/models/signova_characters.keras`, `api/models/character_class_names.json`, and `api/models/character_model_info.json`. Its preliminary evaluation holds out random images because the supplied archives do not identify signer/session IDs. It must not be presented as independent camera accuracy. In particular, J and Z include movement, so add real labeled video examples and evaluate on separate recording sessions before relying on those predictions.
+
 To recreate the sample selection from the source metadata or add local WLASL training clips, download the official MS-ASL metadata archive and extract WLASL v0.3, then run:
 
 ```powershell
@@ -37,7 +51,7 @@ Install `api/requirements.txt`, then start the API from this directory:
 python -m uvicorn app:app --app-dir api --host 127.0.0.1 --port 8000
 ```
 
-In a second terminal, serve the website with `python -m http.server 8080 --directory web`, then open `http://127.0.0.1:8080/?api=http://127.0.0.1:8000`. The V2 API offers `/health` and `/api/predict`.
+In a second terminal, serve the website with `python -m http.server 8080 --directory web`, then open `http://127.0.0.1:8080/?api=http://127.0.0.1:8000`. The V2 API offers `/health` and `/api/predict`; the same upload route accepts multipart `mode=words` or `mode=characters` and selects the corresponding model inside one API service.
 
 ## GitHub Pages and temporary API
 

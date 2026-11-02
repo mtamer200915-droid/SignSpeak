@@ -11,11 +11,15 @@ from pathlib import Path
 import numpy as np
 import tensorflow as tf
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Form
 from fastapi.middleware.cors import CORSMiddleware
 
 ROOT = Path(__file__).resolve().parent
 MODEL_PATH = ROOT / "models" / "signova_v2.keras"
 INFO_PATH = ROOT / "models" / "model_info.json"
+CHAR_MODEL_PATH = ROOT / "models" / "signova_characters.keras"
+CHAR_CLASS_PATH = ROOT / "models" / "character_class_names.json"
+CHAR_INFO_PATH = ROOT / "models" / "character_model_info.json"
 SIZE = 224
 FRAME_COUNT = 12
 SAMPLE_FPS = 8
@@ -31,6 +35,9 @@ app.add_middleware(
 
 _model = None
 _info: dict = {}
+_character_model = None
+_character_info: dict = {}
+_character_classes: list[str] = []
 _ffmpeg = None
 
 
@@ -47,7 +54,7 @@ def get_ffmpeg() -> str:
 
 
 def load_bundle() -> None:
-    global _model, _info
+    global _model, _info, _character_model, _character_info, _character_classes
     if not MODEL_PATH.is_file() or not INFO_PATH.is_file():
         raise RuntimeError("Signova V2 model files are missing. Run the training workflow first.")
     _info = json.loads(INFO_PATH.read_text(encoding="utf-8"))
@@ -57,6 +64,28 @@ def load_bundle() -> None:
         raise RuntimeError(f"Expected model input {expected}; found {_model.input_shape}.")
     if _model.output_shape[-1] != len(_info.get("classes", [])):
         raise RuntimeError("Model output size does not match model_info.json classes.")
+
+    # The image-based character model is optional so the existing word API keeps
+    # starting normally while character training is in progress.
+    character_files = (CHAR_MODEL_PATH, CHAR_CLASS_PATH, CHAR_INFO_PATH)
+    if any(path.exists() for path in character_files):
+        try:
+            if not all(path.is_file() for path in character_files):
+                raise RuntimeError("Character model bundle is incomplete.")
+            _character_info = json.loads(CHAR_INFO_PATH.read_text(encoding="utf-8"))
+            _character_classes = json.loads(CHAR_CLASS_PATH.read_text(encoding="utf-8"))
+            if _character_info.get("classes") != _character_classes:
+                raise RuntimeError("Character class names do not match character_model_info.json.")
+            _character_model = tf.keras.models.load_model(CHAR_MODEL_PATH, compile=False)
+            if tuple(_character_model.input_shape[1:]) != (SIZE, SIZE, 3):
+                raise RuntimeError("Character model must accept one 224x224 RGB image.")
+            if _character_model.output_shape[-1] != len(_character_classes):
+                raise RuntimeError("Character model output does not match its class-name file.")
+        except Exception as exc:
+            _character_model = None
+            _character_info = {}
+            _character_classes = []
+            print(f"Character model unavailable; word model remains online: {exc}", flush=True)
 
 
 @app.on_event("startup")
@@ -91,7 +120,12 @@ def decode_frames(path: Path) -> np.ndarray:
 
 @app.get("/")
 def root() -> dict:
-    return {"service": "Signova V2", "health": "/health", "prediction": "/api/predict"}
+    return {
+        "service": "Signova V2",
+        "health": "/health",
+        "prediction": "/api/predict",
+        "prediction_modes": ["words", "characters"],
+    }
 
 
 @app.get("/health")
@@ -107,36 +141,75 @@ def health() -> dict:
         "test_accuracy": test.get("top1_accuracy"),
         "test_top1_accuracy": test.get("top1_accuracy"),
         "experimental": True,
+        "available_modes": {
+            "words": {"model_loaded": True, "classes": _info.get("classes", [])},
+            "characters": {
+                "model_loaded": _character_model is not None,
+                "classes": _character_classes,
+                "test_accuracy": _character_info.get("test", {}).get("top1_accuracy"),
+                "test_clip_count": _character_info.get("test", {}).get("clip_count"),
+            },
+        },
     }
 
 
 @app.post("/api/predict")
-async def predict(file: UploadFile = File(...)) -> dict:
+async def predict(file: UploadFile = File(...), mode: str = Form("words")) -> dict:
     if _model is None:
         raise HTTPException(status_code=503, detail="The V2 model is not ready.")
+    if mode not in {"words", "characters"}:
+        raise HTTPException(status_code=400, detail="Choose words or characters prediction mode.")
+    if mode == "characters" and _character_model is None:
+        raise HTTPException(status_code=503, detail="The letters and numbers model is not trained or installed yet.")
     payload = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(payload) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="Video is too large. Keep uploads under 80 MB.")
+        raise HTTPException(status_code=413, detail="The image or video is too large. Keep uploads under 80 MB.")
     if not payload:
-        raise HTTPException(status_code=400, detail="Choose a non-empty video file.")
+        raise HTTPException(status_code=400, detail="Choose a non-empty image or video file.")
 
     suffix = Path(file.filename or "sign.mp4").suffix.lower()
-    if suffix not in {".mp4", ".mov", ".webm", ".m4v", ".mkv", ".avi"}:
-        suffix = ".mp4"
-    try:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
-            temp.write(payload)
-            temp_path = Path(temp.name)
-        frames = decode_frames(temp_path)
-    finally:
-        try:
-            temp_path.unlink(missing_ok=True)
-        except UnboundLocalError:
-            pass
+    image_suffixes = {".jpg", ".jpeg", ".png"}
+    video_suffixes = {".mp4", ".mov", ".webm", ".m4v", ".mkv", ".avi"}
+    is_image = suffix in image_suffixes or (file.content_type or "").lower().startswith("image/")
+    if mode == "words" and is_image:
+        raise HTTPException(status_code=415, detail="The word model needs a short video clip. Use a video upload.")
 
-    scaled = tf.keras.applications.mobilenet_v2.preprocess_input(frames)
-    probabilities = _model.predict(scaled[None, ...], verbose=0)[0]
-    classes = _info["classes"]
+    if mode == "characters" and is_image:
+        try:
+            image = tf.io.decode_image(payload, channels=3, expand_animations=False)
+            image = tf.image.resize(image, (SIZE, SIZE), antialias=True)
+            character_input = tf.cast(image, tf.float32)[None, ...]
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail="The image could not be decoded. Use a clear JPG or PNG photo.") from exc
+        probabilities = _character_model.predict(character_input, verbose=0)[0]
+        input_type = "image"
+    else:
+        if suffix not in video_suffixes:
+            raise HTTPException(status_code=415, detail="Choose a supported video file, or send a JPG or PNG image in character mode.")
+        try:
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
+                temp.write(payload)
+                temp_path = Path(temp.name)
+            frames = decode_frames(temp_path)
+        finally:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except UnboundLocalError:
+                pass
+
+        if mode == "characters":
+            # Average per-frame static-handshape scores for character videos.
+            frame_probabilities = _character_model.predict(frames, batch_size=FRAME_COUNT, verbose=0)
+            probabilities = frame_probabilities.mean(axis=0)
+        else:
+            scaled = tf.keras.applications.mobilenet_v2.preprocess_input(frames.copy())
+            probabilities = _model.predict(scaled[None, ...], verbose=0)[0]
+        input_type = "video"
+
+    if mode == "characters":
+        classes = _character_classes
+    else:
+        classes = _info["classes"]
     order = np.argsort(probabilities)[::-1][:3]
     suggestions = [
         {"word": classes[int(index)], "score": round(float(probabilities[index] * 100), 2)}
@@ -147,8 +220,10 @@ async def predict(file: UploadFile = File(...)) -> dict:
         "word": best["word"],
         "confidence": best["score"],
         "suggestions": suggestions,
-        "prediction_source": "signova_v2_local_model",
+        "prediction_source": "signova_v2_character_model" if mode == "characters" else "signova_v2_local_model",
         "pose_coverage": None,
-        "model_version": "v2",
+        "model_version": "characters-v1" if mode == "characters" else "v2",
+        "prediction_mode": mode,
+        "input_type": input_type,
         "experimental": True,
     }
