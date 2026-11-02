@@ -28,7 +28,6 @@ EXTRA_CLASSES = ("DELETE", "NOTHING", "SPACE", "UNKNOWN")
 CLASSES = DIGITS + LETTERS + EXTRA_CLASSES
 SEED = 42
 IMAGE_SIZE = 224
-PREPARATION_VERSION = 2
 
 
 def entries_for_archive(archive: zipfile.ZipFile, kind: str):
@@ -67,8 +66,7 @@ def stage_archives(alpha_zip: Path, digits_zip: Path, rebuild: bool, max_images_
             cached = json.loads(marker.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             cached = {}
-        if (cached.get("preparation_version") == PREPARATION_VERSION
-                and cached.get("sources") == sources
+        if (cached.get("sources") == sources
                 and cached.get("max_images_per_class") == max_images_per_class):
             cached_counts = cached.get("counts", {})
             cache_complete = all(
@@ -105,8 +103,7 @@ def stage_archives(alpha_zip: Path, digits_zip: Path, rebuild: bool, max_images_
 
     rng = random.Random(SEED)
     counts = {split: Counter() for split in ("train", "val", "test")}
-    hash_seen: dict[str, str] = {}
-    cross_label_duplicates = 0
+    hash_seen: dict[str, set[str]] = {label: set() for label in CLASSES}
     for label in CLASSES:
         samples = by_class[label]
         rng.shuffle(samples)
@@ -118,12 +115,9 @@ def stage_archives(alpha_zip: Path, digits_zip: Path, rebuild: bool, max_images_
                 for source, member in (item for item in samples if item[0] == archive_path):
                     content = archive.read(member)
                     digest = hashlib.sha256(content).hexdigest()
-                    existing_label = hash_seen.get(digest)
-                    if existing_label is not None:
-                        if existing_label != label:
-                            cross_label_duplicates += 1
+                    if digest in hash_seen[label]:
                         continue
-                    hash_seen[digest] = label
+                    hash_seen[label].add(digest)
                     accepted.append((source, member, content))
         rng.shuffle(accepted)
         if len(accepted) < 30:
@@ -145,14 +139,11 @@ def stage_archives(alpha_zip: Path, digits_zip: Path, rebuild: bool, max_images_
 
     result = {split: dict(counts[split]) for split in counts}
     marker.write_text(json.dumps({
-        "preparation_version": PREPARATION_VERSION,
         "sources": sources,
         "max_images_per_class": max_images_per_class,
         "counts": result,
     }, indent=2), encoding="utf-8")
     print("Prepared split counts:", json.dumps(result, indent=2), flush=True)
-    if cross_label_duplicates:
-        print(f"Skipped {cross_label_duplicates} exact duplicate image(s) labeled as different classes.", flush=True)
     return result
 
 
