@@ -34,3 +34,21 @@ html[dir="rtl"] .camera-tag{left:auto;right:8px}
 @media(max-width:820px){html[dir="rtl"] .sidebar{transform:translateX(100%)}html[dir="rtl"] .sidebar.open{transform:translateX(0)}html[dir="rtl"] .main-area{margin-right:0}html[dir="rtl"] .mobile-menu{margin-right:0;margin-left:10px}}
 @media(max-width:560px){.language-toggle{padding:5px 7px;font-size:9px}html[dir="rtl"] .app-footer{align-items:flex-start}}
 .supported-words{color:var(--muted);font-size:.82rem;line-height:1.7;margin:12px 0 0}.supported-words strong{color:var(--text)}
+
+/* Keep the translator grid and its controls inside the visible page width. */
+.main-area,.page,.translator-layout,.camera-panel,.right-stack{min-width:0}
+.translator-layout{grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr)}
+.right-stack{min-width:0}
+.camera-controls{flex-wrap:wrap}
+
+@media (min-width:821px) and (max-width:1400px){
+  .translator-layout{grid-template-columns:minmax(0,1fr)}
+  .camera-controls .btn{flex:0 1 auto}
+  .right-stack{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+}
+
+@media (max-width:820px){
+  .translator-layout{grid-template-columns:minmax(0,1fr)}
+  .right-stack{grid-template-columns:minmax(0,1fr)}
+  .camera-controls{gap:7px}
+}

@@ -66,9 +66,8 @@ def startup() -> None:
 
 def decode_frames(path: Path) -> np.ndarray:
     # Keep this preprocessing aligned with train_model.extract_frames().
-    crop = "crop='min(iw,ih)':'min(iw,ih)':'(iw-ow)/2':'(ih-oh)/2'"
     vf = (
-        f"{crop},fps={SAMPLE_FPS},scale={SIZE}:{SIZE}:force_original_aspect_ratio=decrease,"
+        f"fps={SAMPLE_FPS},scale={SIZE}:{SIZE}:force_original_aspect_ratio=decrease,"
         f"pad={SIZE}:{SIZE}:(ow-iw)/2:(oh-ih)/2"
     )
     command = [
