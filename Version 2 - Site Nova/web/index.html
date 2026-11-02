@@ -20,6 +20,7 @@
       <nav class="nav-list" aria-label="Main navigation">
         <button class="nav-link active" data-page="home"><span class="nav-icon">⌂</span>Home</button>
         <button class="nav-link" data-page="translator"><span class="nav-icon">◉</span>Translator <span class="nav-pill">CAMERA</span></button>
+        <button class="nav-link" data-page="vocabulary"><span class="nav-icon">Aa</span>Supported signs</button>
         <button class="nav-link" data-page="history"><span class="nav-icon">◷</span>History</button>
         <button class="nav-link" data-page="about"><span class="nav-icon">ⓘ</span>About Signova</button>
       </nav>
@@ -68,28 +69,29 @@
       </section>
 
       <section class="page" id="page-translator">
-        <div class="page-heading"><div><div class="eyebrow">CAMERA TRANSLATION</div><h1>Sign <span>Translator</span></h1><p>Record one sign, check its prediction, then press Done to add it and continue with the next word.</p></div><span class="mode-badge"><i></i> SIGNOVA API</span></div>
+        <div class="page-heading"><div><div class="eyebrow">CAMERA TRANSLATION</div><h1>Sign <span>Translator</span></h1><p>Choose words or characters, record one sign, check its prediction, then add it to your output.</p></div><span class="mode-badge"><i></i> SIGNOVA API</span></div>
         <div class="api-expiry-notice" id="apiExpiryNotice" role="status" aria-live="polite" hidden><span aria-hidden="true">ⓘ</span><p id="apiExpiryMessage"></p></div>
         <div class="translator-layout">
           <div class="panel camera-panel">
             <div class="panel-header"><div><span class="panel-kicker">01 / INPUT</span><h2>Camera feed</h2></div><span class="panel-status"><i></i><span id="cameraStatus">Camera off</span></span></div>
             <div class="camera-stage" id="cameraStage">
               <video id="cameraVideo" autoplay muted playsinline></video>
-              <div class="camera-placeholder" id="cameraPlaceholder"><div class="camera-symbol">◉</div><h3>Your camera, your hands</h3><p>Keep your hands and upper body visible, then record one sign at a time.</p><span class="camera-hint">Camera access requires localhost or HTTPS permission</span></div>
+              <div class="camera-placeholder" id="cameraPlaceholder"><div class="camera-symbol">◉</div><h3>Your camera, your hands</h3><p>For words, keep your hands and upper body visible. For letters and numbers, center one clear handshape.</p><span class="camera-hint">Camera access requires localhost or HTTPS permission</span></div>
               <div class="camera-overlay"><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span><span class="camera-tag"><i></i> LIVE PREVIEW</span></div>
               <div class="framing-guide" id="framingGuide" data-state="waiting" role="status" aria-live="polite">
                 <span class="framing-indicator" aria-hidden="true"></span>
                 <div><strong id="framingTitle">Camera guidance is off</strong><p id="framingMessage">Start the camera to check your position.</p></div>
               </div>
             </div>
-            <div class="camera-controls"><button class="btn btn-primary" id="startCamera">Start camera <span>↗</span></button><button class="btn btn-primary" id="startSign" disabled>Start sign <span>●</span></button><button class="btn btn-ghost" id="stopCamera" disabled>Stop &amp; predict</button><button class="btn btn-ghost" id="flipCamera" disabled title="Switch between the front and rear cameras">Flip camera <span>↻</span></button><button class="btn btn-ghost" id="cameraOff" disabled>Camera off</button><button class="icon-btn" id="flipHint" title="Camera tips" aria-label="Camera tips">?</button></div>
+            <div class="camera-controls"><button class="btn btn-primary" id="startCamera">Start camera <span>↗</span></button><button class="btn btn-primary" id="startSign" disabled>Start sign <span>●</span></button><button class="btn btn-ghost" id="stopCamera" disabled>Stop &amp; predict</button><button class="btn btn-primary" id="takePicture" disabled hidden>Take a picture <span>◎</span></button><button class="btn btn-ghost" id="flipCamera" disabled title="Switch between the front and rear cameras">Flip camera <span>↻</span></button><button class="btn btn-ghost" id="cameraOff" disabled>Camera off</button><button class="icon-btn" id="flipHint" title="Camera tips" aria-label="Camera tips">?</button></div>
             <p class="helper-text" id="cameraHelp">Start the camera first. The local framing guide checks that your face and shoulders are visible before you record. Perform the sign yourself in front of the camera; showing a video on another screen may not be recognized.</p>
             <p class="api-help">The GitHub Actions API demo is temporary. While it runs, expand “Start the temporary public link and verify it” in the latest Signova V2 Team Demo to open the connected website link.</p>
           </div>
           <div class="right-stack">
             <div class="panel prediction-panel">
               <div class="panel-header"><div><span class="panel-kicker">02 / MODEL OUTPUT</span><h2>Prediction</h2></div><span class="sample-badge">MODEL RESULT</span></div>
-              <div class="prediction-content"><div class="prediction-orb">✦</div><div><span class="tiny-label">RECOGNIZED WORD</span><h3 id="predictedWord" data-no-translate>Waiting<span>.</span></h3><p id="predictionDescription">Record a sign or upload a video to get a prediction.</p></div></div>
+              <label class="mode-select" for="predictionMode"><span>Recognition mode</span><select id="predictionMode"><option value="words">Words · record a video</option><option value="characters" disabled>Letters &amp; numbers · take a picture (model not ready)</option></select></label>
+              <div class="prediction-content"><div class="prediction-orb">✦</div><div><span class="tiny-label" id="recognizedTypeLabel">RECOGNIZED WORD</span><h3 id="predictedWord" data-no-translate>Waiting<span>.</span></h3><p id="predictionDescription">Record a sign or upload a video to get a prediction.</p></div></div>
               <div class="confidence-row"><div class="confidence-label"><span id="confidenceLabel">Local model score</span><b id="confidenceText">—</b></div><div class="confidence-track"><span id="confidenceBar"></span></div></div>
               <div class="prediction-suggestions" id="predictionSuggestions" role="group" aria-label="Model options" hidden><span>Model options · choose the word you performed</span><div class="suggestion-list"></div></div>
               <button class="btn btn-outline full-width" id="demoPrediction">Upload sign video <span>✦</span></button>
@@ -100,10 +102,19 @@
               <div class="sentence-box" id="sentenceBox"><span class="sentence-placeholder">Your recognized words will appear here…</span></div>
               <div class="sentence-actions"><button class="btn btn-primary" id="addWord" disabled>Done · Next word <span>→</span></button><button class="btn btn-ghost" id="playSentence" disabled title="Read the sentence aloud" aria-label="Play sentence audio">Play audio <span>▶</span></button><button class="btn btn-ghost" id="clearSentence">Clear</button><button class="icon-btn" id="copySentence" title="Copy sentence" aria-label="Copy sentence">▢</button></div>
               <p class="helper-text" id="sentenceFeedback">Check each prediction, then press Done to build your sentence one word at a time.</p>
-              <p class="supported-words"><strong>Supported signs:</strong> you · want · need · like · help · yes · no · not · deaf · eat · drink · water · home · go · school · book · family · mother · happy · please</p>
             </div>
           </div>
         </div>
+      </section>
+
+      <section class="page" id="page-vocabulary">
+        <div class="page-heading"><div><div class="eyebrow">SIGNOVA VOCABULARY</div><h1>Supported <span>Signs</span></h1><p>Browse the words, letters, and numbers available in the project.</p></div></div>
+        <div class="vocabulary-grid">
+          <article class="panel vocabulary-card"><span class="panel-kicker">WORD MODEL</span><h2>Supported words</h2><p>Video based · one sign per clip</p><div class="vocabulary-chips" id="supportedWordList"></div></article>
+          <article class="panel vocabulary-card"><span class="panel-kicker">CHARACTER MODEL</span><h2>Letters</h2><p>ASL fingerspelling · A–Z</p><div class="vocabulary-chips alphabet-chips" id="supportedLetterList"></div><small class="vocabulary-note">J and Z include movement; this image dataset shows still handshapes and does not model the full movement.</small></article>
+          <article class="panel vocabulary-card"><span class="panel-kicker">CHARACTER MODEL</span><h2>Numbers</h2><p>ASL number handshapes · 0–9</p><div class="vocabulary-chips number-chips" id="supportedNumberList"></div><small class="vocabulary-note" id="characterModelAccuracy">Letters and numbers model is not trained or connected yet.</small></article>
+        </div>
+        <div class="notice"><span>ⓘ</span><p>Words and characters use separate models under the same Signova API. Image test accuracy is reported separately and does not guarantee camera accuracy.</p></div>
       </section>
 
       <section class="page" id="page-history">

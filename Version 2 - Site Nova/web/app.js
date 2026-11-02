@@ -1,8 +1,9 @@
 (() => {
   "use strict";
 
-  const pages = ["home", "translator", "history", "about"];
-  const pageLabels = { home: "Home", translator: "Translator", history: "History", about: "About Signova" };
+  const pages = ["home", "translator", "vocabulary", "history", "about"];
+  const pageLabels = { home: "Home", translator: "Translator", vocabulary: "Supported signs", history: "History", about: "About Signova" };
+  const supportedWords = ["book", "deaf", "eat", "drink", "family", "go", "happy", "help", "home", "like", "mother", "need", "no", "not", "please", "school", "water", "want", "yes", "you"];
   const currentLanguage = "en";
   function t(source, values = {}) {
     let output = String(source);
@@ -49,7 +50,7 @@
   }
   const API_BASE = resolveApiBase().replace(/\/+$/, "");
   const state = {
-    currentPage: "home", stream: null, currentPrediction: null, sentence: [], history: [],
+    currentPage: "home", stream: null, currentPrediction: null, recognitionMode: "words", sentence: [], history: [],
     cameraFacingMode: "user", poseLandmarker: null, poseTaskPromise: null, poseLoopActive: false,
     isFramingReady: false, readyFrames: 0, manualPoseFallback: false, isAnalyzing: false, lastPoseFrame: 0
   };
@@ -57,11 +58,12 @@
   const $$ = (selector) => [...document.querySelectorAll(selector)];
 
   const elements = {
-    sidebar: $("#sidebar"), pageCrumb: $("#pageCrumb"), toast: $("#toast"),
+    sidebar: $("#sidebar"), pageCrumb: $("#pageCrumb"), toast: $("#toast"), predictionMode: $("#predictionMode"),
+    recognizedTypeLabel: $("#recognizedTypeLabel"),
     sidebarApiStatus: $("#sidebarApiStatus"),
     apiStatus: $("#apiStatus"), apiExpiryNotice: $("#apiExpiryNotice"), apiExpiryMessage: $("#apiExpiryMessage"),
     cameraVideo: $("#cameraVideo"), cameraStage: $("#cameraStage"), cameraStatus: $("#cameraStatus"),
-    startCamera: $("#startCamera"), startSign: $("#startSign"), stopCamera: $("#stopCamera"),
+    startCamera: $("#startCamera"), startSign: $("#startSign"), stopCamera: $("#stopCamera"), takePicture: $("#takePicture"),
     flipCamera: $("#flipCamera"), cameraOff: $("#cameraOff"), cameraHelp: $("#cameraHelp"),
     framingGuide: $("#framingGuide"), framingTitle: $("#framingTitle"), framingMessage: $("#framingMessage"),
     predictedWord: $("#predictedWord"), predictionDescription: $("#predictionDescription"),
@@ -73,6 +75,60 @@
   };
 
   applyLanguage(currentLanguage);
+
+  function fillVocabulary(selector, labels) {
+    const container = $(selector);
+    if (!container) return;
+    container.replaceChildren(...labels.map(label => {
+      const chip = document.createElement("span");
+      chip.className = "vocabulary-chip";
+      chip.dataset.noTranslate = "true";
+      chip.textContent = label;
+      return chip;
+    }));
+  }
+  fillVocabulary("#supportedWordList", supportedWords);
+  fillVocabulary("#supportedLetterList", [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"]);
+  fillVocabulary("#supportedNumberList", [..."0123456789"]);
+
+  function setRecognitionMode(mode) {
+    state.recognitionMode = mode === "characters" ? "characters" : "words";
+    const isCharacters = state.recognitionMode === "characters";
+    setEnglishText(elements.recognizedTypeLabel, state.recognitionMode === "characters" ? "RECOGNIZED CHARACTER" : "RECOGNIZED WORD");
+    elements.startSign.hidden = isCharacters;
+    elements.stopCamera.hidden = isCharacters;
+    elements.takePicture.hidden = !isCharacters;
+    elements.takePicture.disabled = !isCharacters || !state.stream || state.isAnalyzing || Boolean(state.currentPrediction);
+    if (elements.demoPrediction?.firstChild?.nodeType === Node.TEXT_NODE) {
+      elements.demoPrediction.firstChild.nodeValue = isCharacters ? "Upload character photo " : "Upload sign video ";
+    }
+    elements.demoPrediction?.setAttribute("aria-label", isCharacters ? "Upload character photo" : "Upload sign video");
+    if (isCharacters && state.stream) {
+      state.manualPoseFallback = true;
+      setFramingState("manual", "Ready to capture", "Show one clear handshape in the center of the frame, then take a picture.", true);
+    } else if (!isCharacters && state.stream && !state.poseLoopActive) {
+      state.manualPoseFallback = false;
+      startPoseGuide();
+    }
+    if (elements.addWord && !state.currentPrediction) {
+      const label = state.recognitionMode === "characters" ? "Add character " : "Done · Next word ";
+      if (elements.addWord.firstChild?.nodeType === Node.TEXT_NODE) elements.addWord.firstChild.nodeValue = label;
+    }
+    if (elements.sentenceFeedback && !state.currentPrediction) {
+      setEnglishText(elements.sentenceFeedback, state.recognitionMode === "characters"
+        ? "Check each result, then add letters or numbers to build your text."
+        : "Check each prediction, then press Done to build your sentence one word at a time.");
+    }
+  }
+  elements.predictionMode?.addEventListener("change", () => {
+    if (state.isAnalyzing || (mediaRecorder && mediaRecorder.state === "recording") || state.currentPrediction) {
+      elements.predictionMode.value = state.recognitionMode;
+      toast("Finish the current prediction before changing recognition mode.");
+      return;
+    }
+    setRecognitionMode(elements.predictionMode.value);
+  });
+  setRecognitionMode("words");
 
   async function loadModelReport() {
     const target = $("#modelTestSummary");
@@ -223,6 +279,30 @@
           || !Array.isArray(health.classes) || health.classes.length !== 20) {
           throw new Error("Model is not ready");
         }
+        const characterMode = health.available_modes?.characters;
+        const characterSummary = $("#characterModelAccuracy");
+        if (characterSummary) {
+          if (characterMode?.model_loaded && Number.isFinite(Number(characterMode.test_accuracy))) {
+            const percent = (Number(characterMode.test_accuracy) * 100).toFixed(1);
+            const samples = Number(characterMode.test_clip_count);
+            setEnglishText(characterSummary, Number.isFinite(samples)
+              ? "Image test accuracy: {percent}% across {samples} held-out photos. Camera results can differ."
+              : "Image test accuracy: {percent}%. Camera results can differ.", { percent, samples });
+          } else {
+            setEnglishText(characterSummary, "Letters and numbers model is not trained or connected yet.");
+          }
+        }
+        if (elements.predictionMode) {
+          const option = elements.predictionMode.querySelector('option[value="characters"]');
+          if (option) {
+            option.disabled = !characterMode?.model_loaded;
+            option.textContent = characterMode?.model_loaded ? "Letters & numbers" : "Letters & numbers (model not ready)";
+          }
+          if (!characterMode?.model_loaded && state.recognitionMode === "characters") {
+            elements.predictionMode.value = "words";
+            setRecognitionMode("words");
+          }
+        }
         updateDemoExpiryFromHealth(health);
         const testAccuracy = health.test_accuracy == null ? NaN : Number(health.test_accuracy);
         if (Number.isFinite(testAccuracy) && testAccuracy < 0.20) {
@@ -231,7 +311,7 @@
           elements.apiStatus.classList.add("warning");
           return;
         }
-        setApiStatus("API running · local 20-word V2 model");
+        setApiStatus(characterMode?.model_loaded ? "API running · word and character models" : "API running · local 20-word V2 model");
         elements.apiStatus.classList.remove("error", "warning");
         elements.apiStatus.classList.add("ready");
       } catch (error) {
@@ -323,7 +403,9 @@
     setEnglishText(elements.framingMessage, message);
     state.isFramingReady = ready;
     const isRecording = mediaRecorder && mediaRecorder.state === "recording";
-    elements.startSign.disabled = !state.stream || !ready || isRecording || state.isAnalyzing || Boolean(state.currentPrediction) || typeof MediaRecorder === "undefined";
+    const isCharacters = state.recognitionMode === "characters";
+    elements.startSign.disabled = isCharacters || !state.stream || !ready || isRecording || state.isAnalyzing || Boolean(state.currentPrediction) || typeof MediaRecorder === "undefined";
+    elements.takePicture.disabled = !isCharacters || !state.stream || state.isAnalyzing || Boolean(state.currentPrediction);
   }
 
   async function loadPoseLandmarker() {
@@ -454,9 +536,18 @@
       elements.flipCamera.title = t("Switch to the rear camera");
       setEnglishText(elements.cameraStatus, "Checking your position…");
       setEnglishText(elements.cameraHelp, typeof MediaRecorder === "undefined"
-        ? "Camera preview is ready, but this browser cannot record. Upload a short sign video instead."
-        : "Center your face and shoulders. Recording starts only when you press Start sign.");
-      startPoseGuide();
+        ? state.recognitionMode === "characters"
+          ? "Center one clear handshape and press Take a picture."
+          : "Camera preview is ready, but this browser cannot record. Upload a short sign video instead."
+        : state.recognitionMode === "characters"
+          ? "Center one clear handshape and press Take a picture."
+          : "Center your face and shoulders. Recording starts only when you press Start sign.");
+      if (state.recognitionMode === "characters") {
+        state.manualPoseFallback = true;
+        setFramingState("manual", "Ready to capture", "Show one clear handshape in the center of the frame, then take a picture.", true);
+      } else {
+        startPoseGuide();
+      }
 
     } catch (error) {
       console.error(error);
@@ -524,7 +615,7 @@
       if (blob.size > 100) {
         const extension = mimeType.toLowerCase().includes("mp4") ? "mp4" : "webm";
         const file = new File([blob], `signova_gesture.${extension}`, { type: mimeType });
-        await sendVideoFileToBackend(file);
+        await sendFileToBackend(file);
       } else {
         toast("The clip was too short. Press Start sign and try again.");
         state.isAnalyzing = false;
@@ -555,6 +646,10 @@
   }
 
   function startSignRecording() {
+    if (state.recognitionMode === "characters") {
+      takeCharacterPicture();
+      return;
+    }
     if (!state.stream || (!state.isFramingReady && !state.manualPoseFallback) || state.isAnalyzing || state.currentPrediction) return;
     if (!setupMediaRecorder()) {
       toast("This browser cannot record video. Upload a short sign video instead.");
@@ -663,13 +758,44 @@
 
   elements.startCamera.addEventListener("click", startCamera);
   elements.startSign.addEventListener("click", startSignRecording);
+  elements.takePicture.addEventListener("click", takeCharacterPicture);
   elements.stopCamera.addEventListener("click", finishSign);
   elements.flipCamera.addEventListener("click", flipCamera);
   elements.cameraOff.addEventListener("click", turnCameraOff);
   $("#flipHint").addEventListener("click", () => toast("Keep both hands visible and use steady lighting."));
 
-  // Backend API request and local Signova V2 model prediction.
-  async function sendVideoFileToBackend(videoFile) {
+  async function takeCharacterPicture() {
+    if (!state.stream || state.recognitionMode !== "characters" || state.isAnalyzing || state.currentPrediction) return;
+    const video = elements.cameraVideo;
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
+      toast("The camera image is not ready yet. Wait a moment and try again.");
+      return;
+    }
+    const canvas = document.createElement("canvas");
+    const cropSize = Math.min(video.videoWidth, video.videoHeight) * 0.78;
+    const cropX = (video.videoWidth - cropSize) / 2;
+    const cropY = (video.videoHeight - cropSize) / 2;
+    canvas.width = 224;
+    canvas.height = 224;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) {
+      toast("Could not capture the camera image. Try another browser.");
+      return;
+    }
+    context.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, canvas.width, canvas.height);
+    const photo = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    if (!photo) {
+      toast("Could not create the camera photo. Try again.");
+      return;
+    }
+    const imageFile = new File([photo], "signova-character.jpg", { type: "image/jpeg" });
+    setEnglishText(elements.cameraStatus, "Analyzing photo…");
+    elements.takePicture.disabled = true;
+    await sendFileToBackend(imageFile);
+  }
+
+  // Send the selected prediction input to the shared Signova API.
+  async function sendFileToBackend(inputFile) {
     if (!API_BASE) {
       state.isAnalyzing = false;
       elements.addWord.disabled = true;
@@ -688,7 +814,8 @@
       return;
     }
     const formData = new FormData();
-    formData.append("file", videoFile, videoFile.name || "signova-upload.webm");
+    formData.append("file", inputFile, inputFile.name || "signova-upload.webm");
+    formData.append("mode", state.recognitionMode);
 
     setEnglishText(elements.sentenceFeedback, "Analyzing the sign with the AI model…");
     elements.addWord.disabled = true;
@@ -708,7 +835,9 @@
 
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const error = new Error(result.detail || "Prediction failed. Try a short video with the signer centered in frame.");
+        const error = new Error(result.detail || (state.recognitionMode === "characters"
+          ? "Prediction failed. Try a clear photo of one centered handshape."
+          : "Prediction failed. Try a short video with the signer centered in frame."));
         error.status = response.status;
         throw error;
       }
@@ -726,7 +855,10 @@
           originalLocalWord: result.original_local_word || result.word,
           poseCoverage: Number.isFinite(result.pose_coverage) ? result.pose_coverage : null,
           suggestions: Array.isArray(result.suggestions) ? result.suggestions : [],
-          description: "Experimental Signova V2 model output (20 signs)"
+          mode: result.prediction_mode || state.recognitionMode,
+          description: result.prediction_mode === "characters"
+            ? "Experimental ASL handshape model output. Check the result before adding it."
+            : "Experimental Signova V2 model output (20 signs)"
         });
 
         toast("Prediction received: {word}", { word: result.word });
@@ -750,7 +882,9 @@
       let failureMessage = error.message;
       let toastMessage = failureMessage;
       if (signerMissing) {
-        failureMessage = "No signer was clearly visible in enough frames. Face the camera and keep your shoulders and both arms in frame. For a saved clip, upload the original video instead of filming a screen.";
+        failureMessage = state.recognitionMode === "characters"
+          ? "The photo could not be decoded. Use a clear JPG or PNG image."
+          : "No signer was clearly visible in enough frames. Face the camera and keep your shoulders and both arms in frame. For a saved clip, upload the original video instead of filming a screen.";
         toastMessage = "No signer detected. Show the sign directly to the camera or upload the original video.";
       } else if (error.name === "AbortError") {
         failureMessage = "The API request timed out. Try a shorter recording.";
@@ -759,14 +893,17 @@
         failureMessage = "The prediction service could not be reached. Check the API session and your internet connection.";
         toastMessage = "The prediction API could not be reached. Check the API link and your internet connection.";
       } else if (error.status >= 500) {
-        failureMessage = backendDetail || "The API could not process this video. Try a short MP4 or WebM clip with the signer clearly visible.";
+        failureMessage = backendDetail || (state.recognitionMode === "characters"
+          ? "The API could not process this photo. Try a clear picture of one centered handshape."
+          : "The API could not process this video. Try a short MP4 or WebM clip with the signer clearly visible.");
         toastMessage = "The API could not analyze this clip. Try a short MP4 or WebM video.";
       }
       setEnglishText(elements.sentenceFeedback, "Prediction failed: {detail}", { detail: failureMessage });
       toast(toastMessage);
       state.isAnalyzing = false;
       elements.flipCamera.disabled = !state.stream;
-      elements.startSign.disabled = !state.stream || (!state.isFramingReady && !state.manualPoseFallback);
+      elements.takePicture.disabled = state.recognitionMode !== "characters" || !state.stream;
+      elements.startSign.disabled = state.recognitionMode === "characters" || !state.stream || (!state.isFramingReady && !state.manualPoseFallback);
       if (state.stream) {
         setEnglishText(elements.cameraStatus, "Ready to try again");
         setEnglishText(elements.cameraHelp, signerMissing
@@ -824,14 +961,21 @@
 
   function showRealPrediction(prediction) {
     state.currentPrediction = prediction;
+    if (elements.predictionMode) elements.predictionMode.disabled = true;
+    setEnglishText(elements.recognizedTypeLabel, prediction.mode === "characters" ? "RECOGNIZED CHARACTER" : "RECOGNIZED WORD");
     elements.predictedWord.textContent = prediction.word;
-    const sourceNote = "Experimental Signova V2 model output (20 signs).";
+    const sourceNote = prediction.mode === "characters"
+      ? "Experimental Signova letters-and-numbers model output."
+      : "Experimental Signova V2 model output (20 signs).";
     const descriptionSource = prediction.poseCoverage === null
       ? "{source} Review the suggestions if the word looks wrong."
       : "{source} Person visible in {coverage}% of sampled frames. Review the suggestions if the word looks wrong.";
     setEnglishText(elements.predictionDescription, descriptionSource, { source: sourceNote, coverage: prediction.poseCoverage });
     setEnglishText(elements.confidenceLabel, "Local model score");
     setEnglishText(elements.sentenceFeedback, "Prediction received: {word}. Review it, then press Done to add it.", { word: prediction.word });
+    if (elements.addWord.firstChild?.nodeType === Node.TEXT_NODE) {
+      elements.addWord.firstChild.nodeValue = prediction.mode === "characters" ? "Add character " : "Done · Next word ";
+    }
     renderPredictionSuggestions(prediction.suggestions || [], prediction.word);
     const confidence = Math.max(0, Math.min(100, Number(prediction.confidence) || 0));
     elements.confidenceText.textContent = `${confidence}%`;
@@ -853,7 +997,7 @@
   elements.demoPrediction.addEventListener("click", () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "video/*";
+    input.accept = state.recognitionMode === "characters" ? "image/*" : "video/*";
     input.onchange = (e) => {
       const file = e.target.files[0];
       if (file) {
@@ -863,7 +1007,7 @@
           mediaRecorder = null;
         }
         state.currentPrediction = null;
-        sendVideoFileToBackend(file);
+        sendFileToBackend(file);
       }
     };
     input.click();
@@ -888,13 +1032,30 @@
       });
     }
     const count = state.sentence.length;
-    setText(elements.wordCount, count === 1 ? "{count} word" : "{count} words", { count });
+    const onlyCharacters = count > 0 && state.sentence.every(entry => entry.mode === "characters");
+    setText(elements.wordCount, onlyCharacters
+      ? (count === 1 ? "{count} character" : "{count} characters")
+      : (count === 1 ? "{count} word" : "{count} words"), { count });
     elements.playSentence.disabled = count === 0 || !("speechSynthesis" in window) || typeof window.SpeechSynthesisUtterance !== "function";
     elements.historySentenceTotal.textContent = String(count);
   }
 
   function sentenceText() {
-    return state.sentence.map(entry => entry.word).join(" ");
+    let output = "";
+    let previousMode = "";
+    for (const entry of state.sentence) {
+      const mode = entry.mode || "words";
+      if (mode === "characters") {
+        if (previousMode && previousMode !== "characters" && output && !output.endsWith(" ")) output += " ";
+        if (entry.word === "SPACE") output += " ";
+        else if (entry.word !== "DELETE" && entry.word !== "NOTHING" && entry.word !== "UNKNOWN") output += entry.word;
+      } else {
+        if (output && !output.endsWith(" ")) output += " ";
+        output += entry.word;
+      }
+      previousMode = mode;
+    }
+    return output.trim();
   }
 
   function renderHistory() {
@@ -934,18 +1095,42 @@
 
   elements.addWord.addEventListener("click", () => {
     if (!state.currentPrediction) return;
+    if (state.currentPrediction.mode === "characters" && ["NOTHING", "UNKNOWN"].includes(state.currentPrediction.word)) {
+      toast(state.currentPrediction.word === "NOTHING" ? "No sign was added." : "The character was unclear. Try again.");
+      state.currentPrediction = null;
+      if (elements.predictionMode) elements.predictionMode.disabled = false;
+      elements.addWord.disabled = true;
+      setRecognitionMode(state.recognitionMode);
+      if (elements.predictionSuggestions) elements.predictionSuggestions.hidden = true;
+      return;
+    }
+    if (state.currentPrediction.mode === "characters" && state.currentPrediction.word === "DELETE") {
+      const lastCharacter = state.sentence.findLastIndex(entry => entry.mode === "characters" && entry.word !== "SPACE");
+      if (lastCharacter >= 0) state.sentence.splice(lastCharacter, 1);
+      renderSentence();
+      state.currentPrediction = null;
+      if (elements.predictionMode) elements.predictionMode.disabled = false;
+      elements.addWord.disabled = true;
+      setRecognitionMode(state.recognitionMode);
+      if (elements.predictionSuggestions) elements.predictionSuggestions.hidden = true;
+      toast("Removed the last character.");
+      return;
+    }
     const entry = {
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       word: state.currentPrediction.word,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      source: "model"
+      source: "model",
+      mode: state.currentPrediction.mode || "words"
     };
     state.sentence.push(entry);
     state.history.push(entry);
     renderSentence();
     renderHistory();
     state.currentPrediction = null;
+    if (elements.predictionMode) elements.predictionMode.disabled = false;
     elements.addWord.disabled = true;
+    setRecognitionMode(state.recognitionMode);
     setText(elements.predictedWord, "Ready for next sign");
     setEnglishText(elements.predictionDescription, "The previous word was added. Record or upload the next sign.");
     elements.confidenceText.textContent = "—";
@@ -956,7 +1141,10 @@
     toast("Added \"{word}\".", { word: entry.word });
     if (state.stream && !mediaRecorder) {
       elements.flipCamera.disabled = false;
-      if (state.isFramingReady || state.manualPoseFallback) {
+      if (state.recognitionMode === "characters") {
+        setEnglishText(elements.cameraStatus, "Ready for next character");
+        setEnglishText(elements.cameraHelp, "Change to the next letter or number, then press Take a picture.");
+      } else if (state.isFramingReady || state.manualPoseFallback) {
         startSignRecording();
       } else {
         setEnglishText(elements.cameraStatus, "Center yourself for the next sign");
