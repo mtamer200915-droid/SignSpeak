@@ -204,11 +204,12 @@ jobs:
 
           expires_at=$(date -u -d "+${DEMO_MINUTES} minutes" +%s)
           echo "$expires_at" >/tmp/signova-v2-expires-at
-          site_url="https://mtamer200915-droid.github.io/SignSpeak/v2/?api=${api_url}"
+          site_url="https://mtamer200915-droid.github.io/SignSpeak/v2/?api=${api_url}&build=${GITHUB_SHA}"
           {
             echo "## Signova V2 demo is ready"
             echo "- [Open the V2 website connected to the live API](${site_url})"
             echo "- API health: [${api_url}/health](${api_url}/health)"
+            echo "- Website source commit: ${GITHUB_SHA:0:7}"
             echo "- This shared API stays online for **${DEMO_MINUTES} minutes** after the public check."
             echo "- Supported labels: book, deaf, eat, drink, family, go, happy, help, home, like, mother, need, no, not, please, school, water, want, yes, you."
             echo "- The upload smoke check verifies wiring only; the independent accuracy result is listed on the site."
