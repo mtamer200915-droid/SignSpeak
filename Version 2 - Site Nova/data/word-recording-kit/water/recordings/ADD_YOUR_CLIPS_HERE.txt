@@ -1,0 +1,3 @@
+Save your own labeled recordings in this folder.
+Expected: 8 new clip(s), named water_001.mp4 through water_008.mp4.
+One sign per clip; keep the whole signer and both hands visible.

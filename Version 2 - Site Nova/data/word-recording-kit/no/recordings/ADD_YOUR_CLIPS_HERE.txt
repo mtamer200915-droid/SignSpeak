@@ -1,0 +1,3 @@
+Save your own labeled recordings in this folder.
+Expected: 15 new clip(s), named no_001.mp4 through no_015.mp4.
+One sign per clip; keep the whole signer and both hands visible.
