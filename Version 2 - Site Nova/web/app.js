@@ -60,7 +60,7 @@
   const $$ = (selector) => [...document.querySelectorAll(selector)];
 
   const elements = {
-    sidebar: $("#sidebar"), pageCrumb: $("#pageCrumb"), toast: $("#toast"), predictionMode: $("#predictionMode"),
+    sidebar: $("#sidebar"), pageCrumb: $("#pageCrumb"), toast: $("#toast"),
     recognizedTypeLabel: $("#recognizedTypeLabel"),
     sidebarApiStatus: $("#sidebarApiStatus"),
     apiStatus: $("#apiStatus"), apiExpiryNotice: $("#apiExpiryNotice"), apiExpiryMessage: $("#apiExpiryMessage"),
@@ -103,9 +103,9 @@
     elements.takePicture.hidden = false;
     elements.takePicture.disabled = !state.stream || state.isAnalyzing || Boolean(state.currentPrediction) || Boolean(mediaRecorder && mediaRecorder.state === "recording");
     if (elements.demoPrediction?.firstChild?.nodeType === Node.TEXT_NODE) {
-      elements.demoPrediction.firstChild.nodeValue = isCharacters ? "Upload character photo " : "Upload sign video ";
+      elements.demoPrediction.firstChild.nodeValue = "Upload photo or video ";
     }
-    elements.demoPrediction?.setAttribute("aria-label", isCharacters ? "Upload character photo" : "Upload sign video");
+    elements.demoPrediction?.setAttribute("aria-label", "Upload a sign photo or video");
     if (isCharacters && state.stream) {
       stopPoseGuideLoop();
       state.manualPoseFallback = true;
@@ -124,15 +124,15 @@
         : "Check each prediction, then press Done to build your sentence one word at a time.");
     }
   }
-  elements.predictionMode?.addEventListener("change", () => {
-    if (state.isAnalyzing || (mediaRecorder && mediaRecorder.state === "recording") || state.currentPrediction) {
-      elements.predictionMode.value = state.recognitionMode;
-      toast("Finish the current prediction before changing recognition mode.");
-      return;
-    }
-    setRecognitionMode(elements.predictionMode.value);
-  });
   setRecognitionMode("words");
+
+  function inferRecognitionMode(file) {
+    const type = String(file?.type || "").toLowerCase();
+    const name = String(file?.name || "").toLowerCase();
+    return type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|gif|heic|heif|avif)$/.test(name)
+      ? "characters"
+      : "words";
+  }
 
   function clearCapturePreview() {
     if (state.capturePreviewUrl) URL.revokeObjectURL(state.capturePreviewUrl);
@@ -321,13 +321,6 @@
               : "Image test accuracy: {percent}%. Camera results can differ.", { percent, samples });
           } else {
             setEnglishText(characterSummary, "Letters and numbers model is not trained or connected yet.");
-          }
-        }
-        if (elements.predictionMode) {
-          const option = elements.predictionMode.querySelector('option[value="characters"]');
-          if (option) {
-            option.disabled = false;
-            option.textContent = characterMode?.model_loaded ? "Letters & numbers · take a photo" : "Letters & numbers · model not ready";
           }
         }
         updateDemoExpiryFromHealth(health);
@@ -644,7 +637,7 @@
         showCapturePreview(blob, "video");
         const extension = mimeType.toLowerCase().includes("mp4") ? "mp4" : "webm";
         const file = new File([blob], `signova_gesture.${extension}`, { type: mimeType });
-        await sendFileToBackend(file);
+        await sendFileToBackend(file, "words");
       } else {
         toast("The clip was too short. Press Start sign and try again.");
         state.isAnalyzing = false;
@@ -680,7 +673,6 @@
   function startSignRecording() {
     if (state.recognitionMode !== "words") {
       if (state.currentPrediction || state.isAnalyzing || (mediaRecorder && mediaRecorder.state === "recording")) return;
-      if (elements.predictionMode) elements.predictionMode.value = "words";
       setRecognitionMode("words");
     }
     if (!state.stream || state.isAnalyzing || state.currentPrediction) return;
@@ -812,7 +804,6 @@
     clearCapturePreview();
     state.isAnalyzing = false;
     state.currentPrediction = null;
-    if (elements.predictionMode) elements.predictionMode.disabled = false;
     elements.addWord.disabled = true;
     if (elements.predictionSuggestions) elements.predictionSuggestions.hidden = true;
     setText(elements.predictedWord, "Waiting");
@@ -860,17 +851,18 @@
     }
     const imageFile = new File([photo], "signova-character.jpg", { type: "image/jpeg" });
     showCapturePreview(photo, "photo");
-    if (elements.predictionMode) elements.predictionMode.value = "characters";
     setRecognitionMode("characters");
     setEnglishText(elements.cameraStatus, "Analyzing photo…");
     elements.takePicture.disabled = true;
-    await sendFileToBackend(imageFile);
+    await sendFileToBackend(imageFile, "characters");
   }
 
   // Send the selected prediction input to the shared Signova API.
-  async function sendFileToBackend(inputFile) {
+  async function sendFileToBackend(inputFile, mode = inferRecognitionMode(inputFile)) {
+    mode = mode === "characters" ? "characters" : "words";
+    setRecognitionMode(mode);
     const requestId = state.captureRequestId;
-    if (API_BASE && state.recognitionMode === "characters" && !state.characterModelAvailable) {
+    if (API_BASE && mode === "characters" && !state.characterModelAvailable) {
       state.isAnalyzing = false;
       elements.addWord.disabled = true;
       elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
@@ -908,7 +900,7 @@
     }
     const formData = new FormData();
     formData.append("file", inputFile, inputFile.name || "signova-upload.webm");
-    formData.append("mode", state.recognitionMode);
+    formData.append("mode", mode);
 
     setEnglishText(elements.sentenceFeedback, "Analyzing the sign with the AI model…");
     elements.addWord.disabled = true;
@@ -933,7 +925,7 @@
 
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const error = new Error(result.detail || (state.recognitionMode === "characters"
+        const error = new Error(result.detail || (mode === "characters"
           ? "Prediction failed. Try a clear photo of one centered handshape."
           : "Prediction failed. Try a short video with the signer centered in frame."));
         error.status = response.status;
@@ -953,7 +945,7 @@
           originalLocalWord: result.original_local_word || result.word,
           poseCoverage: Number.isFinite(result.pose_coverage) ? result.pose_coverage : null,
           suggestions: Array.isArray(result.suggestions) ? result.suggestions : [],
-          mode: result.prediction_mode || state.recognitionMode,
+          mode: result.prediction_mode || mode,
           description: result.prediction_mode === "characters"
             ? "Experimental ASL handshape model output. Check the result before adding it."
             : "Experimental Signova V2 model output (20 signs)"
@@ -969,7 +961,7 @@
       console.error("Backend connection error:", error);
       const canRetryAutomatically = error.status == null || isTransientStatus(error.status);
       const backendDetail = String(error?.message || "");
-      const signerMissing = (error.status === 422 && state.recognitionMode !== "characters")
+      const signerMissing = (error.status === 422 && mode !== "characters")
         || /no signer was clearly visible|no person pose was detected/i.test(backendDetail);
       if (canRetryAutomatically) {
         lastHealthError = true;
@@ -981,7 +973,7 @@
       let failureMessage = error.message;
       let toastMessage = failureMessage;
       if (signerMissing) {
-        failureMessage = state.recognitionMode === "characters"
+        failureMessage = mode === "characters"
           ? "The photo could not be decoded. Use a clear JPG or PNG image."
           : "No signer was clearly visible in enough frames. Face the camera and keep your shoulders and both arms in frame. For a saved clip, upload the original video instead of filming a screen.";
         toastMessage = "No signer detected. Show the sign directly to the camera or upload the original video.";
@@ -992,10 +984,10 @@
         failureMessage = "The prediction service could not be reached. Check the API session and your internet connection.";
         toastMessage = "The prediction API could not be reached. Check the API link and your internet connection.";
       } else if (error.status >= 500) {
-        failureMessage = backendDetail || (state.recognitionMode === "characters"
+        failureMessage = backendDetail || (mode === "characters"
           ? "The API could not process this photo. Try a clear picture of one centered handshape."
           : "The API could not process this video. Try a short MP4 or WebM clip with the signer clearly visible.");
-        toastMessage = state.recognitionMode === "characters"
+        toastMessage = mode === "characters"
           ? "The letters-and-numbers model is not ready to analyze this photo."
           : "The API could not analyze this clip. Try a short MP4 or WebM video.";
       }
@@ -1062,7 +1054,6 @@
 
   function showRealPrediction(prediction) {
     state.currentPrediction = prediction;
-    if (elements.predictionMode) elements.predictionMode.disabled = true;
     setEnglishText(elements.recognizedTypeLabel, prediction.mode === "characters" ? "RECOGNIZED CHARACTER" : "RECOGNIZED WORD");
     elements.predictedWord.textContent = prediction.word;
     const sourceNote = prediction.mode === "characters"
@@ -1102,7 +1093,7 @@
   elements.demoPrediction.addEventListener("click", () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = state.recognitionMode === "characters" ? "image/*" : "video/*";
+    input.accept = "image/*,video/*";
     input.onchange = (e) => {
       const file = e.target.files[0];
       if (file) {
@@ -1112,7 +1103,9 @@
           mediaRecorder = null;
         }
         state.currentPrediction = null;
-        sendFileToBackend(file);
+        const mode = inferRecognitionMode(file);
+        setRecognitionMode(mode);
+        sendFileToBackend(file, mode);
       }
     };
     input.click();
@@ -1204,7 +1197,6 @@
       toast(state.currentPrediction.word === "NOTHING" ? "No sign was added." : "The character was unclear. Try again.");
       state.currentPrediction = null;
       clearCapturePreview();
-      if (elements.predictionMode) elements.predictionMode.disabled = false;
       elements.addWord.disabled = true;
       elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
       elements.takePicture.disabled = !state.stream;
@@ -1219,7 +1211,6 @@
       renderSentence();
       state.currentPrediction = null;
       clearCapturePreview();
-      if (elements.predictionMode) elements.predictionMode.disabled = false;
       elements.addWord.disabled = true;
       elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
       elements.takePicture.disabled = !state.stream;
@@ -1242,7 +1233,6 @@
     renderHistory();
     state.currentPrediction = null;
     clearCapturePreview();
-    if (elements.predictionMode) elements.predictionMode.disabled = false;
     elements.addWord.disabled = true;
     elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
     elements.takePicture.disabled = !state.stream;

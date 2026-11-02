@@ -92,11 +92,10 @@
           <div class="right-stack">
             <div class="panel prediction-panel">
               <div class="panel-header"><div><span class="panel-kicker">02 / MODEL OUTPUT</span><h2>Prediction</h2></div><span class="sample-badge">MODEL RESULT</span></div>
-              <label class="mode-select" for="predictionMode"><span>Recognition mode</span><select id="predictionMode"><option value="words">Words · record a video</option><option value="characters">Letters &amp; numbers · take a photo</option></select></label>
               <div class="prediction-content"><div class="prediction-orb">✦</div><div><span class="tiny-label" id="recognizedTypeLabel">RECOGNIZED WORD</span><h3 id="predictedWord" data-no-translate>Waiting<span>.</span></h3><p id="predictionDescription">Record a sign or upload a video to get a prediction.</p></div></div>
               <div class="confidence-row"><div class="confidence-label"><span id="confidenceLabel">Local model score</span><b id="confidenceText">—</b></div><div class="confidence-track"><span id="confidenceBar"></span></div></div>
               <div class="prediction-suggestions" id="predictionSuggestions" role="group" aria-label="Model options" hidden><span>Model options · choose the word you performed</span><div class="suggestion-list"></div></div>
-              <button class="btn btn-outline full-width" id="demoPrediction">Upload sign video <span>✦</span></button>
+              <button class="btn btn-outline full-width" id="demoPrediction">Upload photo or video <span>✦</span></button>
               <p class="sample-warning">Experimental model score, not a guarantee. Verify each word before adding it.</p>
             </div>
             <div class="panel sentence-panel">

@@ -53,6 +53,7 @@ jobs:
           cp index.html style.css framing.css app.js site/
           mkdir -p site/v2
           cp -R "Version 2 - Site Nova/web/." site/v2/
+          sed -i "s#src=\"app.js\"#src=\"app.js?build=${GITHUB_SHA}\"#" site/v2/index.html
           touch site/.nojekyll
 
       - name: Upload website artifact
