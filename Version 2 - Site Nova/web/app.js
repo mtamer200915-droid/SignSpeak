@@ -54,7 +54,7 @@
     currentPage: "home", stream: null, currentPrediction: null, recognitionMode: "words", sentence: [], history: [],
     cameraFacingMode: "user", poseLandmarker: null, poseTaskPromise: null, poseLoopActive: false,
     isFramingReady: false, readyFrames: 0, manualPoseFallback: false, isAnalyzing: false, lastPoseFrame: 0,
-    captureRequestId: 0, capturePreviewUrl: null
+    captureRequestId: 0, capturePreviewUrl: null, characterModelAvailable: false
   };
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -310,6 +310,7 @@
           throw new Error("Model is not ready");
         }
         const characterMode = health.available_modes?.characters;
+        state.characterModelAvailable = Boolean(characterMode?.model_loaded);
         const characterSummary = $("#characterModelAccuracy");
         if (characterSummary) {
           if (characterMode?.model_loaded && Number.isFinite(Number(characterMode.test_accuracy))) {
@@ -869,6 +870,24 @@
   // Send the selected prediction input to the shared Signova API.
   async function sendFileToBackend(inputFile) {
     const requestId = state.captureRequestId;
+    if (API_BASE && state.recognitionMode === "characters" && !state.characterModelAvailable) {
+      state.isAnalyzing = false;
+      elements.addWord.disabled = true;
+      elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
+      elements.takePicture.disabled = !state.stream;
+      elements.stopCamera.disabled = true;
+      elements.restartCapture.hidden = false;
+      elements.restartCapture.disabled = false;
+      setEnglishText(elements.sentenceFeedback, "Photo captured, but this API has no trained letters-and-numbers model. The photo was not sent to the word-video model.");
+      setEnglishText(elements.cameraStatus, "Photo captured · character model not ready");
+      setEnglishText(elements.cameraHelp, "Your photo is shown in the camera frame. Train and deploy the letters-and-numbers model before requesting a character prediction.");
+      setEnglishText(elements.framingTitle, "Character model not ready");
+      setEnglishText(elements.framingMessage, "The photo is held here. Use Restart capture to clear it and try again.");
+      elements.framingGuide.dataset.state = "adjust";
+      elements.cameraStage.dataset.framing = "adjust";
+      toast("Photo captured. Character prediction is not available on this API yet.");
+      return;
+    }
     if (!API_BASE) {
       state.isAnalyzing = false;
       elements.addWord.disabled = true;
