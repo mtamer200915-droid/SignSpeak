@@ -1187,6 +1187,9 @@
       clearCapturePreview();
       if (elements.predictionMode) elements.predictionMode.disabled = false;
       elements.addWord.disabled = true;
+      elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
+      elements.takePicture.disabled = !state.stream;
+      elements.stopCamera.disabled = true;
       setRecognitionMode(state.recognitionMode);
       if (elements.predictionSuggestions) elements.predictionSuggestions.hidden = true;
       return;
@@ -1196,8 +1199,12 @@
       if (lastCharacter >= 0) state.sentence.splice(lastCharacter, 1);
       renderSentence();
       state.currentPrediction = null;
+      clearCapturePreview();
       if (elements.predictionMode) elements.predictionMode.disabled = false;
       elements.addWord.disabled = true;
+      elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
+      elements.takePicture.disabled = !state.stream;
+      elements.stopCamera.disabled = true;
       setRecognitionMode(state.recognitionMode);
       if (elements.predictionSuggestions) elements.predictionSuggestions.hidden = true;
       toast("Removed the last character.");
@@ -1218,6 +1225,9 @@
     clearCapturePreview();
     if (elements.predictionMode) elements.predictionMode.disabled = false;
     elements.addWord.disabled = true;
+    elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
+    elements.takePicture.disabled = !state.stream;
+    elements.stopCamera.disabled = true;
     setRecognitionMode(state.recognitionMode);
     setText(elements.predictedWord, "Ready for next sign");
     setEnglishText(elements.predictionDescription, "The previous word was added. Record or upload the next sign.");
