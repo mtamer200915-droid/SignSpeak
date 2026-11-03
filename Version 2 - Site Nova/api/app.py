@@ -137,6 +137,7 @@ def health() -> dict:
         "status": "ok",
         "model_loaded": True,
         "model_version": "v2",
+        "build_sha": os.environ.get("SIGNOVA_BUILD_SHA", "local"),
         "classes": _info.get("classes", []),
         "test_accuracy": test.get("top1_accuracy"),
         "test_top1_accuracy": test.get("top1_accuracy"),

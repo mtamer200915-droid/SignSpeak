@@ -59,6 +59,8 @@ jobs:
           cp -R "Version 2 - Site Nova/web/." site/v2/
           mkdir -p site/v2/learning/word-sign-videos
           cp -R "Version 2 - Site Nova/learning/word-sign-videos/." site/v2/learning/word-sign-videos/
+          website_version=$(python3 -c 'import json; print(json.load(open("Version 2 - Site Nova/web/version.json"))["version"])')
+          printf '{"version":"%s","build":"%s"}\n' "$website_version" "$GITHUB_SHA" > site/v2/version.json
           sed -i "s#src=\"app.js\"#src=\"app.js?build=${GITHUB_SHA}\"#" site/v2/index.html
           touch site/.nojekyll
 

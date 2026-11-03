@@ -29,6 +29,10 @@
     if (description) description.content = "Signova — an AI-assisted sign language translation interface.";
   }
   const requestedApi = new URLSearchParams(window.location.search).get("api");
+  const requestedBuild = new URLSearchParams(window.location.search).get("build");
+  const runningScript = document.currentScript || [...document.scripts].find(script => script.src.includes("app.js"));
+  const currentBuild = runningScript?.src ? new URL(runningScript.src, document.baseURI).searchParams.get("build") : null;
+  const websiteBuildMismatch = Boolean(requestedBuild && currentBuild && requestedBuild !== currentBuild);
   function resolveApiBase() {
     const configuredApi = window.SIGNOVA_API_BASE || requestedApi;
     if (configuredApi) {
@@ -48,7 +52,7 @@
       ? "http://127.0.0.1:8000"
       : "";
   }
-  const API_BASE = resolveApiBase().replace(/\/+$/, "");
+  const API_BASE = (websiteBuildMismatch ? "" : resolveApiBase()).replace(/\/+$/, "");
   let mediaRecorder = null;
   const state = {
     currentPage: "home", stream: null, currentPrediction: null, recognitionMode: "words", sentence: [], history: [],
@@ -181,10 +185,28 @@
   }
   void loadModelReport();
 
+  async function loadSiteVersion() {
+    const versionLabel = $("#siteVersion");
+    const buildLabel = $("#siteBuild");
+    if (!versionLabel || !buildLabel) return;
+    try {
+      const response = await fetch(`./version.json?site=${encodeURIComponent(currentBuild || "current")}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("Version information unavailable");
+      const release = await response.json();
+      setText(versionLabel, `Signova V${release.version}`);
+      setText(buildLabel, String(release.build || currentBuild || "local").slice(0, 7));
+    } catch {
+      setText(versionLabel, "Signova V2.2.0");
+      setText(buildLabel, String(currentBuild || "local").slice(0, 7));
+    }
+  }
+  void loadSiteVersion();
+
   let toastTimer;
   let demoExpiresAt = null;
   let lastHealthError = false;
   let apiAddressMissing = false;
+  let apiBuildMismatch = websiteBuildMismatch;
   let healthCheckPromise = null;
 
   const reconnectDelays = [2000, 5000, 10000, 20000];
@@ -233,6 +255,12 @@
 
   function updateApiExpiryNotice() {
     if (!elements.apiExpiryNotice || !elements.apiExpiryMessage) return;
+    if (apiBuildMismatch) {
+      elements.apiExpiryNotice.hidden = false;
+      elements.apiExpiryNotice.classList.remove("expired");
+      setText(elements.apiExpiryMessage, "This website and prediction API are from different builds. Open the connected website link from the newest Signova V2 API run summary.");
+      return;
+    }
     if (demoExpiresAt === null && !lastHealthError) {
       elements.apiExpiryNotice.hidden = true;
       return;
@@ -240,7 +268,9 @@
     if (apiAddressMissing) {
       elements.apiExpiryNotice.hidden = false;
       elements.apiExpiryNotice.classList.remove("expired");
-      setText(elements.apiExpiryMessage, "This page has no API address. In the latest Signova V2 Team Demo, expand “Start the temporary public link and verify it” and open its Connected website link.");
+      setText(elements.apiExpiryMessage, apiBuildMismatch
+        ? "This website link belongs to an older build. Open the connected website link from the newest Signova V2 API run."
+        : "This page has no API address. Start the Signova V2 API workflow, choose a duration, then open its connected website link from the run summary.");
       return;
     }
     const secondsLeft = demoExpiresAt === null ? null : Math.ceil((demoExpiresAt - Date.now()) / 1000);
@@ -288,7 +318,7 @@
       apiAddressMissing = true;
       lastHealthError = true;
       updateApiExpiryNotice();
-      setApiStatus("API address missing · open the Signova V2 demo run summary");
+      setApiStatus(apiBuildMismatch ? "Old website or API build · open the newest connected link" : "API address missing · open the Signova V2 demo run summary");
       elements.apiStatus.classList.remove("ready", "warning");
       elements.apiStatus.classList.add("error");
       return;
@@ -309,6 +339,10 @@
           || !Array.isArray(health.classes) || health.classes.length !== 20) {
           throw new Error("Model is not ready");
         }
+        if (requestedApi && requestedBuild && health.build_sha !== requestedBuild) {
+          apiBuildMismatch = true;
+          throw new Error("Website and API build do not match");
+        }
         const characterMode = health.available_modes?.characters;
         state.characterModelAvailable = Boolean(characterMode?.model_loaded);
         const characterSummary = $("#characterModelAccuracy");
@@ -325,7 +359,7 @@
         }
         updateDemoExpiryFromHealth(health);
         const testAccuracy = health.test_accuracy == null ? NaN : Number(health.test_accuracy);
-        if (Number.isFinite(testAccuracy) && testAccuracy < 0.20) {
+        if (Number.isFinite(testAccuracy) && testAccuracy < 0.30) {
           setApiStatus("API running · low test accuracy ({accuracy}%)", { accuracy: (testAccuracy * 100).toFixed(1) });
           elements.apiStatus.classList.remove("ready", "error");
           elements.apiStatus.classList.add("warning");
@@ -337,7 +371,9 @@
       } catch (error) {
         lastHealthError = true;
         updateApiExpiryNotice();
-        setApiStatus(requestedApi
+        setApiStatus(apiBuildMismatch
+          ? "API build mismatch · open the newest connected website link"
+          : requestedApi
           ? "API unavailable · automatic retry is ready"
           : "API not configured · open the Signova V2 demo run summary");
         elements.apiStatus.classList.remove("ready", "warning");
@@ -884,15 +920,17 @@
       state.isAnalyzing = false;
       elements.addWord.disabled = true;
       elements.flipCamera.disabled = !state.stream;
-      setEnglishText(elements.sentenceFeedback, "This page has no connected API address. In the latest Signova V2 Team Demo, expand “Start the temporary public link and verify it” and open its Connected website link.");
+      setEnglishText(elements.sentenceFeedback, apiBuildMismatch
+        ? "This website and API build do not match. Open the connected website link from the newest Signova V2 API run summary."
+        : "This page has no connected API address. Start the Signova V2 API workflow, choose a duration, and open the connected website link from its run summary.");
       elements.startSign.disabled = !state.stream || (!state.isFramingReady && !state.manualPoseFallback);
       if (state.stream) {
         setEnglishText(elements.cameraStatus, "Prediction API offline");
-        setEnglishText(elements.cameraHelp, "The recording is ready, but this page has no API address. In the latest Signova V2 Team Demo, expand “Start the temporary public link and verify it” and open its Connected website link.");
+        setEnglishText(elements.cameraHelp, "The recording is ready, but this page has no API address. Start the Signova V2 API workflow, choose a duration, and open the connected website link from its run summary.");
         elements.framingGuide.dataset.state = "manual";
         elements.cameraStage.dataset.framing = "manual";
         setEnglishText(elements.framingTitle, "Prediction API offline");
-        setEnglishText(elements.framingMessage, "Your recording could not be sent. In the latest Signova V2 Team Demo, expand “Start the temporary public link and verify it” and open its Connected website link.");
+        setEnglishText(elements.framingMessage, "Your recording could not be sent. Start the Signova V2 API workflow, choose a duration, and open the connected website link from its run summary.");
       }
       toast("No connected prediction API address.");
       elements.takePicture.disabled = !state.stream;

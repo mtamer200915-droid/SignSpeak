@@ -47,6 +47,14 @@ html[dir="rtl"] .camera-tag{left:auto;right:8px}
 .camera-stage video.capture-review{object-fit:contain}
 @media(max-width:560px){.vocabulary-grid{grid-template-columns:minmax(0,1fr)}.vocabulary-card{padding:15px}}
 
+.release-card{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:17px 20px;margin-top:16px}
+.release-card>div{display:grid;gap:5px}
+.release-card strong{font:600 17px 'Space Grotesk',sans-serif;color:#e5edff}
+.release-card small{font-size:9px;color:#8d9bb3}
+.release-card code{color:#a7b8ff}
+.release-card .btn{font-size:9px;padding:10px 12px}
+@media(max-width:560px){.release-card{align-items:flex-start;flex-direction:column;padding:15px}.release-card .btn{width:100%;justify-content:center}}
+
 /* Keep the translator grid and its controls inside the visible page width. */
 .main-area,.page,.translator-layout,.camera-panel,.right-stack{min-width:0}
 .translator-layout{grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr)}

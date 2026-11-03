@@ -7,7 +7,7 @@ on:
         description: How long the shared Signova V2 demo stays online
         type: choice
         required: true
-        default: "315"
+        default: "60"
         options:
           - "15"
           - "30"
@@ -61,6 +61,7 @@ jobs:
           TF_ENABLE_ONEDNN_OPTS: "0"
           TF_NUM_INTEROP_THREADS: "1"
           TF_NUM_INTRAOP_THREADS: "1"
+          SIGNOVA_BUILD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           cat >/tmp/signova-v2-supervisor.sh <<'SH'
@@ -90,6 +91,27 @@ jobs:
             exit 1
           fi
           cat /tmp/signova-v2-health.json
+
+      - name: Require both trained prediction models
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          health = json.loads(Path("/tmp/signova-v2-health.json").read_text())
+          modes = health.get("available_modes", {})
+          words = modes.get("words", {})
+          characters = modes.get("characters", {})
+          expected_characters = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") | {"DELETE", "NOTHING", "SPACE", "UNKNOWN"}
+          assert health.get("model_version") == "v2", "Unexpected word model version."
+          assert words.get("model_loaded") is True and len(words.get("classes", [])) == 20, "The 20-class word model did not load."
+          assert characters.get("model_loaded") is True, "The letters-and-numbers model did not load."
+          assert set(characters.get("classes", [])) == expected_characters, "The character model labels do not match the expected 40 classes."
+          print("Both Signova V2 models loaded: 20 word classes and 40 character classes.")
+          print(f"Word held-out Top-1 accuracy: {health.get('test_accuracy')}")
+          print(f"Character held-out image accuracy: {characters.get('test_accuracy')}")
+          PY
 
       - name: Check a video upload through the local API
         shell: bash
@@ -163,7 +185,7 @@ jobs:
           PY
           fi
 
-      - name: Start the temporary public link and verify it
+      - name: Start and verify the API, then get the connected website link
         shell: bash
         env:
           DEMO_MINUTES: ${{ inputs.duration_minutes }}
@@ -193,28 +215,47 @@ jobs:
           fi
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
           health = json.loads(Path("/tmp/signova-v2-public-health.json").read_text())
           assert health.get("status") == "ok" and health.get("model_version") == "v2"
-          print("Public V2 API health check succeeded.")
           modes = health.get("available_modes", {})
-          print(f"Word model loaded: {modes.get('words', {}).get('model_loaded', False)}")
-          print(f"Character model loaded: {modes.get('characters', {}).get('model_loaded', False)}")
+          expected_characters = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") | {"DELETE", "NOTHING", "SPACE", "UNKNOWN"}
+          assert health.get("build_sha") == os.environ["GITHUB_SHA"], "The public API is from a different or older build."
+          assert modes.get("words", {}).get("model_loaded") is True and len(modes.get("words", {}).get("classes", [])) == 20
+          assert modes.get("characters", {}).get("model_loaded") is True
+          assert set(modes.get("characters", {}).get("classes", [])) == expected_characters
+          print("Public V2 API health check succeeded for both models and the current build.")
           PY
+
+          site_version=""
+          for attempt in $(seq 1 60); do
+            site_version=$(curl --silent --fail "https://mtamer200915-droid.github.io/SignSpeak/v2/version.json?check=${GITHUB_SHA}" || true)
+            if [ -n "$site_version" ] && python -c 'import json,sys; data=json.loads(sys.argv[1]); sys.exit(0 if data.get("build")==sys.argv[2] else 1)' "$site_version" "$GITHUB_SHA"; then
+              break
+            fi
+            sleep 5
+          done
+          if [ -z "$site_version" ] || ! python -c 'import json,sys; data=json.loads(sys.argv[1]); sys.exit(0 if data.get("build")==sys.argv[2] else 1)' "$site_version" "$GITHUB_SHA"; then
+            echo "The website for this API build is not published yet. Wait for the Pages workflow to finish, then run the API demo again."
+            exit 1
+          fi
+          website_version=$(python -c 'import json,sys; print(json.loads(sys.argv[1])["version"])' "$site_version")
 
           expires_at=$(date -u -d "+${DEMO_MINUTES} minutes" +%s)
           echo "$expires_at" >/tmp/signova-v2-expires-at
           site_url="https://mtamer200915-droid.github.io/SignSpeak/v2/?api=${api_url}&build=${GITHUB_SHA}"
           {
-            echo "## Signova V2 demo is ready"
-            echo "- [Open the V2 website connected to the live API](${site_url})"
+            echo "## Signova V2 ${website_version} demo is ready"
+            echo "- [Open Signova V2 ${website_version} connected to this live API](${site_url})"
             echo "- API health: [${api_url}/health](${api_url}/health)"
-            echo "- Website source commit: ${GITHUB_SHA:0:7}"
+            echo "- Website and API build: ${GITHUB_SHA:0:7}"
             echo "- This shared API stays online for **${DEMO_MINUTES} minutes** after the public check."
             echo "- Word-video labels: book, deaf, eat, drink, family, go, happy, help, home, like, mother, need, no, not, please, school, water, want, yes, you."
             echo "- Photo-character labels: A–Z, 0–9, DELETE, NOTHING, SPACE, and UNKNOWN. Photos use the character model; videos use the word model through the same API."
             echo "- Character image holdout: 88.3% Top-1 and 97.1% Top-3 across 1,575 images; this is not independent camera accuracy."
             echo "- The upload smoke check verifies wiring only; the independent accuracy result is listed on the site."
+            echo "- Start future demos from [the Signova V2 API workflow](https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo-v2.yml), choose a duration, and use the connected link from the newest run summary."
             echo "- The temporary API URL is public. Use demo clips only."
           } >> "$GITHUB_STEP_SUMMARY"
           echo "Connected website: ${site_url}"
