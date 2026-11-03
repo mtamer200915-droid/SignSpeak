@@ -154,15 +154,30 @@ jobs:
               --form "file=@/tmp/signova-character-smoke.jpg;filename=smoke.jpg;type=image/jpeg" \
               --form "mode=characters" \
               http://127.0.0.1:8000/api/predict --output /tmp/signova-character-prediction.json
+            curl --silent --show-error --fail \
+              --form "file=@/tmp/signova-character-smoke.jpg;filename=smoke.jpg;type=image/jpeg" \
+              --form "mode=letters" \
+              http://127.0.0.1:8000/api/predict --output /tmp/signova-letter-prediction.json
+            curl --silent --show-error --fail \
+              --form "file=@/tmp/signova-character-smoke.jpg;filename=smoke.jpg;type=image/jpeg" \
+              --form "mode=characters" --form "character_kind=numbers" \
+              http://127.0.0.1:8000/api/predict --output /tmp/signova-number-prediction.json
             python - <<'PY'
           import json
           from pathlib import Path
           health = json.loads(Path("/tmp/signova-v2-health.json").read_text())
           result = json.loads(Path("/tmp/signova-character-prediction.json").read_text())
+          letter_result = json.loads(Path("/tmp/signova-letter-prediction.json").read_text())
+          number_result = json.loads(Path("/tmp/signova-number-prediction.json").read_text())
           classes = health["available_modes"]["characters"]["classes"]
           assert result.get("word") in classes
           assert result.get("prediction_mode") == "characters"
+          assert letter_result.get("character_kind") == "letters"
+          assert all(item["word"].isalpha() and len(item["word"]) == 1 for item in letter_result["suggestions"])
+          assert number_result.get("character_kind") == "numbers"
+          assert all(item["word"].isdigit() and len(item["word"]) == 1 for item in number_result["suggestions"])
           print(f"Character image smoke check returned {result['word']!r}.")
+          print("Letter-only and number-only prediction filters returned candidates from the selected group.")
           PY
           else
             printf 'model-not-ready-smoke' >/tmp/signova-character-smoke.jpg

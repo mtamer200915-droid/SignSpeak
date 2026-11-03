@@ -56,7 +56,7 @@
   let mediaRecorder = null;
   const state = {
     currentPage: "home", stream: null, currentPrediction: null, recognitionMode: "words", sentence: [], history: [],
-    cameraFacingMode: "user", poseLandmarker: null, poseTaskPromise: null, poseLoopActive: false,
+    cameraFacingMode: "user", poseLandmarker: null, poseTaskPromise: null, handLandmarker: null, handTaskPromise: null, poseLoopActive: false,
     isFramingReady: false, readyFrames: 0, manualPoseFallback: false, isAnalyzing: false, lastPoseFrame: 0,
     captureRequestId: 0, capturePreviewUrl: null, characterModelAvailable: false
   };
@@ -75,7 +75,8 @@
     framingGuide: $("#framingGuide"), framingTitle: $("#framingTitle"), framingMessage: $("#framingMessage"),
     predictedWord: $("#predictedWord"), predictionDescription: $("#predictionDescription"),
     confidenceLabel: $("#confidenceLabel"), confidenceText: $("#confidenceText"), confidenceBar: $("#confidenceBar"), demoPrediction: $("#demoPrediction"),
-    predictionSuggestions: $("#predictionSuggestions"),
+    predictionSuggestions: $("#predictionSuggestions"), suggestionHeading: $("#suggestionHeading"),
+    recognitionModeHelp: $("#recognitionModeHelp"), recognitionModeButtons: $$(".recognition-mode"),
     addWord: $("#addWord"), playSentence: $("#playSentence"), sentenceBox: $("#sentenceBox"), wordCount: $("#wordCount"),
     sentenceFeedback: $("#sentenceFeedback"), historyRows: $("#historyRows"),
     historyWordTotal: $("#historyWordTotal"), historySentenceTotal: $("#historySentenceTotal")
@@ -99,17 +100,36 @@
   fillVocabulary("#supportedNumberList", [..."0123456789"]);
 
   function setRecognitionMode(mode) {
-    state.recognitionMode = mode === "characters" ? "characters" : "words";
-    const isCharacters = state.recognitionMode === "characters";
-    setEnglishText(elements.recognizedTypeLabel, state.recognitionMode === "characters" ? "RECOGNIZED CHARACTER" : "RECOGNIZED WORD");
-    elements.startSign.hidden = false;
-    elements.stopCamera.hidden = false;
-    elements.takePicture.hidden = false;
-    elements.takePicture.disabled = !state.stream || state.isAnalyzing || Boolean(state.currentPrediction) || Boolean(mediaRecorder && mediaRecorder.state === "recording");
+    state.recognitionMode = ["letters", "numbers"].includes(mode) ? mode : "words";
+    const isCharacters = state.recognitionMode !== "words";
+    const kindLabel = state.recognitionMode === "numbers" ? "NUMBER" : "LETTER";
+    setEnglishText(elements.recognizedTypeLabel, isCharacters ? `RECOGNIZED ${kindLabel}` : "RECOGNIZED WORD");
+    elements.startSign.hidden = isCharacters;
+    elements.stopCamera.hidden = isCharacters;
+    elements.takePicture.hidden = !isCharacters;
+    const captureBusy = state.isAnalyzing || Boolean(state.currentPrediction) || Boolean(mediaRecorder && mediaRecorder.state === "recording");
+    elements.startSign.disabled = isCharacters || !state.stream || captureBusy || typeof MediaRecorder === "undefined";
+    elements.takePicture.disabled = !isCharacters || !state.stream || captureBusy;
+    elements.recognitionModeButtons.forEach(button => {
+      const selected = button.dataset.recognitionMode === state.recognitionMode;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-pressed", String(selected));
+      button.disabled = captureBusy;
+    });
+    const inputDescription = state.recognitionMode === "words"
+      ? "Words use a short video. Letters and numbers use one clear photo."
+      : state.recognitionMode === "numbers"
+        ? "Numbers mode only ranks digits 0–9. Center one handshape and take a photo."
+        : "Letters mode only ranks A–Z. Center one handshape and take a photo.";
+    setEnglishText(elements.recognitionModeHelp, inputDescription);
     if (elements.demoPrediction?.firstChild?.nodeType === Node.TEXT_NODE) {
-      elements.demoPrediction.firstChild.nodeValue = "Upload photo or video ";
+      elements.demoPrediction.firstChild.nodeValue = state.recognitionMode === "words"
+        ? "Upload word video "
+        : state.recognitionMode === "numbers" ? "Upload number photo " : "Upload letter photo ";
     }
-    elements.demoPrediction?.setAttribute("aria-label", "Upload a sign photo or video");
+    elements.demoPrediction?.setAttribute("aria-label", state.recognitionMode === "words"
+      ? "Upload a word sign video"
+      : state.recognitionMode === "numbers" ? "Upload a number photo" : "Upload a letter photo");
     if (isCharacters && state.stream) {
       stopPoseGuideLoop();
       state.manualPoseFallback = true;
@@ -119,24 +139,22 @@
       startPoseGuide();
     }
     if (elements.addWord && !state.currentPrediction) {
-      const label = state.recognitionMode === "characters" ? "Add character " : "Done · Next word ";
+      const label = state.recognitionMode === "numbers" ? "Done · Next number "
+        : state.recognitionMode === "letters" ? "Done · Next letter " : "Done · Next word ";
       if (elements.addWord.firstChild?.nodeType === Node.TEXT_NODE) elements.addWord.firstChild.nodeValue = label;
     }
     if (elements.sentenceFeedback && !state.currentPrediction) {
-      setEnglishText(elements.sentenceFeedback, state.recognitionMode === "characters"
-        ? "Check each result, then add letters or numbers to build your text."
+      setEnglishText(elements.sentenceFeedback, isCharacters
+        ? `Check the ${state.recognitionMode === "numbers" ? "number" : "letter"} result, then add it to your text.`
         : "Check each prediction, then press Done to build your sentence one word at a time.");
     }
   }
   setRecognitionMode("words");
-
-  function inferRecognitionMode(file) {
-    const type = String(file?.type || "").toLowerCase();
-    const name = String(file?.name || "").toLowerCase();
-    return type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|gif|heic|heif|avif)$/.test(name)
-      ? "characters"
-      : "words";
-  }
+  elements.recognitionModeButtons.forEach(button => button.addEventListener("click", () => {
+    if (state.isAnalyzing || state.currentPrediction || (mediaRecorder && mediaRecorder.state === "recording")) return;
+    if (state.capturePreviewUrl) restartCapture();
+    setRecognitionMode(button.dataset.recognitionMode);
+  }));
 
   function clearCapturePreview() {
     if (state.capturePreviewUrl) URL.revokeObjectURL(state.capturePreviewUrl);
@@ -196,7 +214,7 @@
       setText(versionLabel, `Signova V${release.version}`);
       setText(buildLabel, String(release.build || currentBuild || "local").slice(0, 7));
     } catch {
-      setText(versionLabel, "Signova V2.2.0");
+      setText(versionLabel, "Signova V2.3.0");
       setText(buildLabel, String(currentBuild || "local").slice(0, 7));
     }
   }
@@ -360,7 +378,7 @@
         updateDemoExpiryFromHealth(health);
         const testAccuracy = health.test_accuracy == null ? NaN : Number(health.test_accuracy);
         if (Number.isFinite(testAccuracy) && testAccuracy < 0.30) {
-          setApiStatus("API running · low test accuracy ({accuracy}%)", { accuracy: (testAccuracy * 100).toFixed(1) });
+          setApiStatus("Word model running · low held-out accuracy ({accuracy}%)", { accuracy: (testAccuracy * 100).toFixed(1) });
           elements.apiStatus.classList.remove("ready", "error");
           elements.apiStatus.classList.add("warning");
           return;
@@ -458,9 +476,9 @@
     setEnglishText(elements.framingMessage, message);
     state.isFramingReady = ready;
     const isRecording = mediaRecorder && mediaRecorder.state === "recording";
-    const isCharacters = state.recognitionMode === "characters";
-    elements.startSign.disabled = !state.stream || isRecording || state.isAnalyzing || Boolean(state.currentPrediction) || typeof MediaRecorder === "undefined";
-    elements.takePicture.disabled = !state.stream || isRecording || state.isAnalyzing || Boolean(state.currentPrediction);
+    const isCharacters = state.recognitionMode !== "words";
+    elements.startSign.disabled = isCharacters || !state.stream || isRecording || state.isAnalyzing || Boolean(state.currentPrediction) || typeof MediaRecorder === "undefined";
+    elements.takePicture.disabled = !isCharacters || !state.stream || isRecording || state.isAnalyzing || Boolean(state.currentPrediction);
   }
 
   async function loadPoseLandmarker() {
@@ -485,6 +503,56 @@
       })();
     }
     return state.poseTaskPromise;
+  }
+
+  async function loadHandLandmarker() {
+    if (state.handLandmarker) return state.handLandmarker;
+    if (!state.handTaskPromise) {
+      state.handTaskPromise = (async () => {
+        const visionModule = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs");
+        const vision = await visionModule.FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm"
+        );
+        state.handLandmarker = await visionModule.HandLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+          },
+          runningMode: "VIDEO",
+          numHands: 2,
+          minHandDetectionConfidence: 0.45,
+          minHandPresenceConfidence: 0.45,
+          minTrackingConfidence: 0.45
+        });
+        return state.handLandmarker;
+      })();
+    }
+    return state.handTaskPromise;
+  }
+
+  function handCropFromLandmarks(video, landmarks) {
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    const boxes = (landmarks || []).map(hand => {
+      const points = (hand || []).filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+      if (!points.length) return null;
+      const xs = points.map(point => point.x * width);
+      const ys = points.map(point => point.y * height);
+      const left = Math.min(...xs);
+      const right = Math.max(...xs);
+      const top = Math.min(...ys);
+      const bottom = Math.max(...ys);
+      return { left, right, top, bottom, area: (right - left) * (bottom - top) };
+    }).filter(box => box && box.area > 0);
+    if (!boxes.length) return null;
+    boxes.sort((a, b) => b.area - a.area);
+    const hand = boxes[0];
+    const centerX = (hand.left + hand.right) / 2;
+    const centerY = (hand.top + hand.bottom) / 2;
+    const margin = Math.max(hand.right - hand.left, hand.bottom - hand.top) * 1.55;
+    const size = Math.max(80, Math.min(Math.min(width, height), margin));
+    const x = Math.max(0, Math.min(width - size, centerX - size / 2));
+    const y = Math.max(0, Math.min(height - size, centerY - size / 2));
+    return { x, y, size };
   }
 
   function evaluateFraming(landmarks) {
@@ -586,20 +654,20 @@
       elements.cameraStage.dataset.facing = state.cameraFacingMode;
       elements.cameraStatus.parentElement.classList.add("on");
       elements.startCamera.disabled = true;
-      elements.startSign.disabled = typeof MediaRecorder === "undefined";
-      elements.takePicture.disabled = false;
+      elements.startSign.disabled = state.recognitionMode !== "words" || typeof MediaRecorder === "undefined";
+      elements.takePicture.disabled = state.recognitionMode === "words";
       elements.cameraOff.disabled = false;
       elements.flipCamera.disabled = false;
       elements.flipCamera.title = t("Switch to the rear camera");
       setEnglishText(elements.cameraStatus, "Checking your position…");
       setEnglishText(elements.cameraHelp, typeof MediaRecorder === "undefined"
-        ? state.recognitionMode === "characters"
+        ? state.recognitionMode !== "words"
           ? "Center one clear handshape and press Take a picture."
           : "Camera preview is ready, but this browser cannot record. Upload a short sign video instead."
-        : state.recognitionMode === "characters"
+        : state.recognitionMode !== "words"
           ? "Center one clear handshape and press Take a picture."
           : "Center your face and shoulders. Recording starts only when you press Start sign.");
-      if (state.recognitionMode === "characters") {
+      if (state.recognitionMode !== "words") {
         state.manualPoseFallback = true;
         setFramingState("manual", "Ready to capture", "Show one clear handshape in the center of the frame, then take a picture.", true);
       } else {
@@ -660,6 +728,7 @@
       if (recordedChunks.length === 0) {
         toast("No video was captured. Press Start sign to try again.");
         state.isAnalyzing = false;
+        setRecognitionMode(state.recognitionMode);
         elements.flipCamera.disabled = !state.stream;
         const ready = state.isFramingReady || state.manualPoseFallback;
         setFramingState(ready ? "ready" : "adjust", ready ? "You’re ready to sign" : "Adjust your position", "No video was captured. Press Start sign to try again.", ready);
@@ -677,6 +746,7 @@
       } else {
         toast("The clip was too short. Press Start sign and try again.");
         state.isAnalyzing = false;
+        setRecognitionMode(state.recognitionMode);
         elements.flipCamera.disabled = !state.stream;
         const ready = state.isFramingReady || state.manualPoseFallback;
         setFramingState(ready ? "ready" : "adjust", ready ? "You’re ready to sign" : "Adjust your position", "The clip was too short. Press Start sign and try again.", ready);
@@ -702,15 +772,13 @@
     elements.framingGuide.dataset.state = "recording";
     setEnglishText(elements.framingTitle, "Recording your sign");
     setEnglishText(elements.framingMessage, "Keep the sign fully in view, then press Stop & predict.");
+    setRecognitionMode(state.recognitionMode);
     toast("Sign recording started.");
     return true;
   }
 
   function startSignRecording() {
-    if (state.recognitionMode !== "words") {
-      if (state.currentPrediction || state.isAnalyzing || (mediaRecorder && mediaRecorder.state === "recording")) return;
-      setRecognitionMode("words");
-    }
+    if (state.recognitionMode !== "words") return;
     if (!state.stream || state.isAnalyzing || state.currentPrediction) return;
     clearCapturePreview();
     if (!setupMediaRecorder()) {
@@ -746,9 +814,14 @@
       elements.cameraVideo.srcObject = state.stream;
       await elements.cameraVideo.play();
       elements.cameraStage.dataset.facing = nextFacing;
-      setEnglishText(elements.cameraStatus, "Checking your position…");
       elements.flipCamera.title = t(nextFacing === "user" ? "Switch to the rear camera" : "Switch to the front camera");
-      startPoseGuide();
+      if (state.recognitionMode === "words") {
+        setEnglishText(elements.cameraStatus, "Checking your position…");
+        startPoseGuide();
+      } else {
+        state.manualPoseFallback = true;
+        setFramingState("manual", "Ready to capture", "Show one clear handshape in the center of the frame, then take a picture.", true);
+      }
     } catch (error) {
       console.warn("Could not switch camera:", error);
       if (state.stream) state.stream.getTracks().forEach(track => track.stop());
@@ -761,7 +834,11 @@
         elements.cameraVideo.srcObject = state.stream;
         await elements.cameraVideo.play();
         elements.cameraStage.dataset.facing = previousFacing;
-        startPoseGuide();
+        if (state.recognitionMode === "words") startPoseGuide();
+        else {
+          state.manualPoseFallback = true;
+          setFramingState("manual", "Ready to capture", "Show one clear handshape in the center of the frame, then take a picture.", true);
+        }
         toast("Could not switch cameras. Kept the current camera.");
       } catch {
         turnCameraOff();
@@ -769,6 +846,7 @@
       }
     } finally {
       elements.flipCamera.disabled = !state.stream;
+      setRecognitionMode(state.recognitionMode);
     }
   }
 
@@ -776,6 +854,7 @@
     if (mediaRecorder && mediaRecorder.state === "recording") {
       mediaRecorder.stop();
       state.isAnalyzing = true;
+      setRecognitionMode(state.recognitionMode);
       elements.stopCamera.disabled = true;
       elements.flipCamera.disabled = true;
       elements.startSign.disabled = true;
@@ -850,6 +929,7 @@
     elements.flipCamera.disabled = !state.stream;
     elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
     elements.takePicture.disabled = !state.stream;
+    setRecognitionMode(state.recognitionMode);
     if (state.stream) {
       setEnglishText(elements.cameraStatus, "Ready to try again");
       setEnglishText(elements.cameraHelp, "Capture a sign video or take a photo. Press Restart capture to discard the current sample.");
@@ -862,62 +942,77 @@
   }
 
   async function takeCharacterPicture() {
-    if (!state.stream || state.isAnalyzing || state.currentPrediction || (mediaRecorder && mediaRecorder.state === "recording")) return;
+    if (state.recognitionMode === "words" || !state.stream || state.isAnalyzing || state.currentPrediction || (mediaRecorder && mediaRecorder.state === "recording")) return;
     const video = elements.cameraVideo;
     if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
       toast("The camera image is not ready yet. Wait a moment and try again.");
       return;
     }
+    state.isAnalyzing = true;
+    setRecognitionMode(state.recognitionMode);
     const canvas = document.createElement("canvas");
-    const cropSize = Math.min(video.videoWidth, video.videoHeight) * 0.78;
-    const cropX = (video.videoWidth - cropSize) / 2;
-    const cropY = (video.videoHeight - cropSize) / 2;
+    let crop = null;
+    let handDetectionUnavailable = false;
+    setEnglishText(elements.cameraStatus, "Locating hand…");
+    try {
+      const landmarker = await loadHandLandmarker();
+      const result = landmarker.detectForVideo(video, performance.now());
+      crop = handCropFromLandmarks(video, result.landmarks);
+      handDetectionUnavailable = !crop;
+    } catch (error) {
+      console.warn("Hand crop could not be prepared:", error);
+      handDetectionUnavailable = true;
+    }
+    const cropSize = crop?.size || Math.min(video.videoWidth, video.videoHeight) * 0.78;
+    const cropX = crop?.x ?? (video.videoWidth - cropSize) / 2;
+    const cropY = crop?.y ?? (video.videoHeight - cropSize) / 2;
     canvas.width = 224;
     canvas.height = 224;
     const context = canvas.getContext("2d", { alpha: false });
     if (!context) {
+      state.isAnalyzing = false;
+      setRecognitionMode(state.recognitionMode);
       toast("Could not capture the camera image. Try another browser.");
       return;
     }
     context.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, canvas.width, canvas.height);
     const photo = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.92));
     if (!photo) {
+      state.isAnalyzing = false;
+      setRecognitionMode(state.recognitionMode);
       toast("Could not create the camera photo. Try again.");
       return;
     }
-    const imageFile = new File([photo], "signova-character.jpg", { type: "image/jpeg" });
+    const selectedMode = state.recognitionMode;
+    const imageFile = new File([photo], `signova-${selectedMode}.jpg`, { type: "image/jpeg" });
     showCapturePreview(photo, "photo");
-    setRecognitionMode("characters");
+    if (handDetectionUnavailable) toast("Hand framing was unavailable. Center one clear handshape in the camera view for best results.");
     setEnglishText(elements.cameraStatus, "Analyzing photo…");
     elements.takePicture.disabled = true;
-    await sendFileToBackend(imageFile, "characters");
+    await sendFileToBackend(imageFile, selectedMode);
   }
 
   // Send the selected prediction input to the shared Signova API.
-  async function sendFileToBackend(inputFile, mode = inferRecognitionMode(inputFile)) {
-    mode = mode === "characters" ? "characters" : "words";
-    setRecognitionMode(mode);
+  async function sendFileToBackend(inputFile, mode = state.recognitionMode) {
+    const selectedMode = ["letters", "numbers"].includes(mode) ? mode : "words";
+    const isCharacters = selectedMode !== "words";
+    const apiMode = isCharacters ? "characters" : "words";
+    const fileType = String(inputFile?.type || "").toLowerCase();
+    const fileName = String(inputFile?.name || "").toLowerCase();
+    const isImage = fileType.startsWith("image/") || /\.(png|jpe?g|webp|bmp|gif|heic|heif|avif)$/.test(fileName);
+    setRecognitionMode(selectedMode);
     const requestId = state.captureRequestId;
-    if (API_BASE && mode === "characters" && !state.characterModelAvailable) {
-      state.isAnalyzing = false;
-      elements.addWord.disabled = true;
-      elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
-      elements.takePicture.disabled = !state.stream;
-      elements.stopCamera.disabled = true;
-      elements.restartCapture.hidden = false;
-      elements.restartCapture.disabled = false;
-      setEnglishText(elements.sentenceFeedback, "Photo captured, but this API has no trained letters-and-numbers model. The photo was not sent to the word-video model.");
-      setEnglishText(elements.cameraStatus, "Photo captured · character model not ready");
-      setEnglishText(elements.cameraHelp, "Your photo is shown in the camera frame. Train and deploy the letters-and-numbers model before requesting a character prediction.");
-      setEnglishText(elements.framingTitle, "Character model not ready");
-      setEnglishText(elements.framingMessage, "The photo is held here. Use Restart capture to clear it and try again.");
-      elements.framingGuide.dataset.state = "adjust";
-      elements.cameraStage.dataset.framing = "adjust";
-      toast("Photo captured. Character prediction is not available on this API yet.");
+    if (isCharacters !== isImage) {
+      toast(isCharacters ? "Choose a photo for letters or numbers." : "Choose a short video for word recognition.");
+      if (state.stream) {
+        elements.takePicture.disabled = !isCharacters;
+        elements.startSign.disabled = isCharacters || typeof MediaRecorder === "undefined";
+      }
       return;
     }
     if (!API_BASE) {
       state.isAnalyzing = false;
+      setRecognitionMode(selectedMode);
       elements.addWord.disabled = true;
       elements.flipCamera.disabled = !state.stream;
       setEnglishText(elements.sentenceFeedback, apiBuildMismatch
@@ -938,11 +1033,13 @@
     }
     const formData = new FormData();
     formData.append("file", inputFile, inputFile.name || "signova-upload.webm");
-    formData.append("mode", mode);
+    formData.append("mode", apiMode);
+    if (isCharacters) formData.append("character_kind", selectedMode);
 
     setEnglishText(elements.sentenceFeedback, "Analyzing the sign with the AI model…");
     elements.addWord.disabled = true;
     state.isAnalyzing = true;
+    setRecognitionMode(selectedMode);
     elements.startSign.disabled = true;
     elements.takePicture.disabled = true;
     elements.restartCapture.hidden = false;
@@ -963,7 +1060,7 @@
 
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const error = new Error(result.detail || (mode === "characters"
+        const error = new Error(result.detail || (isCharacters
           ? "Prediction failed. Try a clear photo of one centered handshape."
           : "Prediction failed. Try a short video with the signer centered in frame."));
         error.status = response.status;
@@ -971,6 +1068,25 @@
       }
 
       if (result && result.word) {
+        let suggestions = Array.isArray(result.suggestions)
+          ? result.suggestions.filter(item => item && typeof item.word === "string")
+          : [];
+        if (isCharacters) {
+          const allowedClass = selectedMode === "numbers" ? /^\d$/ : /^[A-Za-z]$/;
+          suggestions = suggestions.filter(item => allowedClass.test(item.word));
+          if (!allowedClass.test(String(result.word))) {
+            if (!suggestions.length) {
+              const error = new Error(`The API returned no ${selectedMode} candidates. Check that the latest API workflow is running.`);
+              error.status = response.status;
+              throw error;
+            }
+            result.word = suggestions[0].word;
+            result.confidence = suggestions[0].score;
+          }
+        }
+        if (!suggestions.some(item => item.word === result.word)) {
+          suggestions.unshift({ word: result.word, score: Number(result.confidence) || 0 });
+        }
         lastHealthError = false;
         updateApiExpiryNotice();
         setApiStatus("API running · prediction received");
@@ -982,9 +1098,10 @@
           predictionSource: result.prediction_source || "local",
           originalLocalWord: result.original_local_word || result.word,
           poseCoverage: Number.isFinite(result.pose_coverage) ? result.pose_coverage : null,
-          suggestions: Array.isArray(result.suggestions) ? result.suggestions : [],
-          mode: result.prediction_mode || mode,
-          description: result.prediction_mode === "characters"
+          suggestions,
+          mode: result.prediction_mode || apiMode,
+          characterKind: isCharacters ? selectedMode : null,
+          description: apiMode === "characters"
             ? "Experimental ASL handshape model output. Check the result before adding it."
             : "Experimental Signova V2 model output (20 signs)"
         });
@@ -999,7 +1116,7 @@
       console.error("Backend connection error:", error);
       const canRetryAutomatically = error.status == null || isTransientStatus(error.status);
       const backendDetail = String(error?.message || "");
-      const signerMissing = (error.status === 422 && mode !== "characters")
+      const signerMissing = (error.status === 422 && !isCharacters)
         || /no signer was clearly visible|no person pose was detected/i.test(backendDetail);
       if (canRetryAutomatically) {
         lastHealthError = true;
@@ -1011,7 +1128,7 @@
       let failureMessage = error.message;
       let toastMessage = failureMessage;
       if (signerMissing) {
-        failureMessage = mode === "characters"
+        failureMessage = isCharacters
           ? "The photo could not be decoded. Use a clear JPG or PNG image."
           : "No signer was clearly visible in enough frames. Face the camera and keep your shoulders and both arms in frame. For a saved clip, upload the original video instead of filming a screen.";
         toastMessage = "No signer detected. Show the sign directly to the camera or upload the original video.";
@@ -1022,16 +1139,17 @@
         failureMessage = "The prediction service could not be reached. Check the API session and your internet connection.";
         toastMessage = "The prediction API could not be reached. Check the API link and your internet connection.";
       } else if (error.status >= 500) {
-        failureMessage = backendDetail || (mode === "characters"
+        failureMessage = backendDetail || (isCharacters
           ? "The API could not process this photo. Try a clear picture of one centered handshape."
           : "The API could not process this video. Try a short MP4 or WebM clip with the signer clearly visible.");
-        toastMessage = mode === "characters"
+        toastMessage = isCharacters
           ? "The letters-and-numbers model is not ready to analyze this photo."
           : "The API could not analyze this clip. Try a short MP4 or WebM video.";
       }
       setEnglishText(elements.sentenceFeedback, "Prediction failed: {detail}", { detail: failureMessage });
       toast(toastMessage);
       state.isAnalyzing = false;
+      setRecognitionMode(selectedMode);
       elements.flipCamera.disabled = !state.stream;
       elements.takePicture.disabled = !state.stream;
       elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
@@ -1052,12 +1170,20 @@
     }
   }
 
-  function renderPredictionSuggestions(suggestions, selectedWord) {
+  function renderPredictionSuggestions(suggestions, selectedWord, predictionMode, characterKind) {
     if (!elements.predictionSuggestions) return;
     const list = elements.predictionSuggestions.querySelector(".suggestion-list");
     if (!list) return;
+    const heading = predictionMode === "characters"
+      ? `Top ${characterKind === "numbers" ? "number" : "letter"} options · choose the sign you performed`
+      : "Top word options · choose the sign you performed";
+    setEnglishText(elements.suggestionHeading, heading);
     list.replaceChildren();
-    const candidates = suggestions.filter(item => item && typeof item.word === "string").slice(0, 3);
+    const candidates = suggestions.filter(item => {
+      if (!item || typeof item.word !== "string") return false;
+      if (predictionMode !== "characters") return true;
+      return characterKind === "numbers" ? /^\d$/.test(item.word) : /^[A-Za-z]$/.test(item.word);
+    }).slice(0, 3);
     elements.predictionSuggestions.hidden = candidates.length === 0;
     candidates.forEach(candidate => {
       const button = document.createElement("button");
@@ -1081,7 +1207,9 @@
         elements.predictedWord.textContent = candidate.word;
         elements.confidenceText.textContent = `${state.currentPrediction.confidence}%`;
         elements.confidenceBar.style.width = `${Math.max(0, Math.min(100, state.currentPrediction.confidence))}%`;
-        setEnglishText(elements.predictionDescription, "You selected this word from the model's three suggestions. Check it before adding.");
+        setEnglishText(elements.predictionDescription, predictionMode === "characters"
+          ? "You selected this character from the model's three suggestions. Check it before adding."
+          : "You selected this word from the model's three suggestions. Check it before adding.");
         list.querySelectorAll(".suggestion-option").forEach(option => {
           option.setAttribute("aria-pressed", String(option === button));
         });
@@ -1092,10 +1220,14 @@
 
   function showRealPrediction(prediction) {
     state.currentPrediction = prediction;
-    setEnglishText(elements.recognizedTypeLabel, prediction.mode === "characters" ? "RECOGNIZED CHARACTER" : "RECOGNIZED WORD");
+    setRecognitionMode(state.recognitionMode);
+    const isCharacters = prediction.mode === "characters";
+    const characterKind = prediction.characterKind || (/^\d+$/.test(prediction.word) ? "numbers" : "letters");
+    const kindName = characterKind === "numbers" ? "NUMBER" : "LETTER";
+    setEnglishText(elements.recognizedTypeLabel, isCharacters ? `RECOGNIZED ${kindName}` : "RECOGNIZED WORD");
     elements.predictedWord.textContent = prediction.word;
-    const sourceNote = prediction.mode === "characters"
-      ? "Experimental Signova letters-and-numbers model output."
+    const sourceNote = isCharacters
+      ? `Experimental Signova ${characterKind} model output. Results are restricted to ${characterKind}.`
       : "Experimental Signova V2 model output (20 signs).";
     const descriptionSource = prediction.poseCoverage === null
       ? "{source} Review the suggestions if the word looks wrong."
@@ -1106,21 +1238,24 @@
     if (elements.addWord.firstChild?.nodeType === Node.TEXT_NODE) {
       const nextLabel = prediction.mode !== "characters"
         ? "Done · Next word "
-        : /^\d+$/.test(prediction.word) ? "Done · Next number " : "Done · Next letter ";
+        : characterKind === "numbers" ? "Done · Next number " : "Done · Next letter ";
       elements.addWord.firstChild.nodeValue = nextLabel;
     }
-    renderPredictionSuggestions(prediction.suggestions || [], prediction.word);
+    renderPredictionSuggestions(prediction.suggestions || [], prediction.word, prediction.mode, characterKind);
     const confidence = Math.max(0, Math.min(100, Number(prediction.confidence) || 0));
     elements.confidenceText.textContent = `${confidence}%`;
     elements.confidenceBar.style.width = `${confidence}%`;
     elements.addWord.disabled = false;
     state.isAnalyzing = false;
+    setRecognitionMode(state.recognitionMode);
     elements.startSign.disabled = true;
     elements.takePicture.disabled = true;
     elements.flipCamera.disabled = true;
     if (state.stream) {
       setEnglishText(elements.cameraStatus, "Prediction ready · Press Done");
-      setEnglishText(elements.cameraHelp, "Review the word, then press Done to continue.");
+      setEnglishText(elements.cameraHelp, isCharacters
+        ? `Review the ${characterKind === "numbers" ? "number" : "letter"}, then press Done to continue.`
+        : "Review the word, then press Done to continue.");
       elements.framingGuide.dataset.state = "ready";
       elements.cameraStage.dataset.framing = "ready";
       setEnglishText(elements.framingTitle, "Prediction ready");
@@ -1131,7 +1266,7 @@
   elements.demoPrediction.addEventListener("click", () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*,video/*";
+    input.accept = state.recognitionMode === "words" ? "video/*,.mp4,.mov,.webm,.m4v,.mkv,.avi" : "image/*,.jpg,.jpeg,.png";
     input.onchange = (e) => {
       const file = e.target.files[0];
       if (file) {
@@ -1141,7 +1276,7 @@
           mediaRecorder = null;
         }
         state.currentPrediction = null;
-        const mode = inferRecognitionMode(file);
+        const mode = state.recognitionMode;
         setRecognitionMode(mode);
         sendFileToBackend(file, mode);
       }
@@ -1286,7 +1421,7 @@
     toast("Added \"{word}\".", { word: entry.word });
     if (state.stream && !mediaRecorder) {
       elements.flipCamera.disabled = false;
-      if (state.recognitionMode === "characters") {
+      if (state.recognitionMode !== "words") {
         setEnglishText(elements.cameraStatus, "Ready for next character");
         setEnglishText(elements.cameraHelp, "Change to the next letter or number, then press Take photo.");
       } else if (state.isFramingReady || state.manualPoseFallback) {

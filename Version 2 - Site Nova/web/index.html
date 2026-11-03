@@ -69,8 +69,16 @@
       </section>
 
       <section class="page" id="page-translator">
-        <div class="page-heading"><div><div class="eyebrow">CAMERA TRANSLATION</div><h1>Sign <span>Translator</span></h1><p>Choose words or characters, record one sign, check its prediction, then add it to your output.</p></div><span class="mode-badge"><i></i> SIGNOVA API</span></div>
+        <div class="page-heading"><div><div class="eyebrow">CAMERA TRANSLATION</div><h1>Sign <span>Translator</span></h1><p>Choose Words, Letters, or Numbers first. Signova then uses only the matching model classes.</p></div><span class="mode-badge"><i></i> SIGNOVA API</span></div>
         <div class="api-expiry-notice" id="apiExpiryNotice" role="status" aria-live="polite" hidden><span aria-hidden="true">ⓘ</span><p id="apiExpiryMessage"></p></div>
+        <div class="recognition-selector panel">
+          <div><span class="panel-kicker">RECOGNITION TYPE</span><strong>What are you signing?</strong><p id="recognitionModeHelp">Words use a short video. Letters and numbers use one clear photo.</p></div>
+          <div class="recognition-mode-buttons" role="group" aria-label="Choose what to recognize">
+            <button class="recognition-mode active" type="button" data-recognition-mode="words" aria-pressed="true">Words <small>Video</small></button>
+            <button class="recognition-mode" type="button" data-recognition-mode="letters" aria-pressed="false">Letters <small>Photo</small></button>
+            <button class="recognition-mode" type="button" data-recognition-mode="numbers" aria-pressed="false">Numbers <small>Photo</small></button>
+          </div>
+        </div>
         <div class="translator-layout">
           <div class="panel camera-panel">
             <div class="panel-header"><div><span class="panel-kicker">01 / INPUT</span><h2>Camera feed</h2></div><span class="panel-status"><i></i><span id="cameraStatus">Camera off</span></span></div>
@@ -78,7 +86,7 @@
               <video id="cameraVideo" autoplay muted playsinline></video>
               <img class="capture-review" id="captureImage" alt="Captured sign photo preview" hidden />
               <video class="capture-review" id="captureVideo" controls playsinline hidden></video>
-              <div class="camera-placeholder" id="cameraPlaceholder"><div class="camera-symbol">◉</div><h3>Your camera, your hands</h3><p>For words, keep your hands and upper body visible. For letters and numbers, center one clear handshape.</p><span class="camera-hint">Camera access requires localhost or HTTPS permission</span></div>
+              <div class="camera-placeholder" id="cameraPlaceholder"><div class="camera-symbol">◉</div><h3>Your camera, your hands</h3><p>Choose Words, Letters, or Numbers above, then follow the capture prompt.</p><span class="camera-hint">Camera access requires localhost or HTTPS permission</span></div>
               <div class="camera-overlay"><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span><span class="camera-tag"><i></i> LIVE PREVIEW</span></div>
               <div class="framing-guide" id="framingGuide" data-state="waiting" role="status" aria-live="polite">
                 <span class="framing-indicator" aria-hidden="true"></span>
@@ -94,8 +102,8 @@
               <div class="panel-header"><div><span class="panel-kicker">02 / MODEL OUTPUT</span><h2>Prediction</h2></div><span class="sample-badge">MODEL RESULT</span></div>
               <div class="prediction-content"><div class="prediction-orb">✦</div><div><span class="tiny-label" id="recognizedTypeLabel">RECOGNIZED WORD</span><h3 id="predictedWord" data-no-translate>Waiting<span>.</span></h3><p id="predictionDescription">Record a sign or upload a video to get a prediction.</p></div></div>
               <div class="confidence-row"><div class="confidence-label"><span id="confidenceLabel">Local model score</span><b id="confidenceText">—</b></div><div class="confidence-track"><span id="confidenceBar"></span></div></div>
-              <div class="prediction-suggestions" id="predictionSuggestions" role="group" aria-label="Model options" hidden><span>Model options · choose the word you performed</span><div class="suggestion-list"></div></div>
-              <button class="btn btn-outline full-width" id="demoPrediction">Upload photo or video <span>✦</span></button>
+              <div class="prediction-suggestions" id="predictionSuggestions" role="group" aria-label="Model options" hidden><span id="suggestionHeading">Top model options</span><div class="suggestion-list"></div></div>
+              <button class="btn btn-outline full-width" id="demoPrediction">Upload word video <span>✦</span></button>
               <p class="sample-warning">Experimental model score, not a guarantee. Verify each word before adding it.</p>
             </div>
             <div class="panel sentence-panel">
@@ -128,11 +136,11 @@
 
       <section class="page" id="page-about">
         <div class="page-heading"><div><div class="eyebrow">THE IDEA BEHIND THE INTERFACE</div><h1>About <span>Signova</span></h1><p>Technology should bring people closer. Signova is a student project exploring sign-language recognition.</p></div><div class="about-logo">S<span>O</span></div></div>
-        <div class="about-hero panel"><div class="about-hero-copy"><span class="panel-kicker">OUR MISSION</span><h2>Making communication<br />feel more <span>connected.</span></h2><p>Signova V2 recognizes 20 isolated American Sign Language signs. The frontend sends a short clip to a separate API, which returns the model's top three candidate words for review.</p></div><div class="about-graphic"><div class="graphic-ring"></div><div class="graphic-core">✳</div><span class="graphic-word word-one">GESTURE</span><span class="graphic-word word-two">MEANING</span><span class="graphic-word word-three">CONNECTION</span></div></div>
+        <div class="about-hero panel"><div class="about-hero-copy"><span class="panel-kicker">OUR MISSION</span><h2>Making communication<br />feel more <span>connected.</span></h2><p>Signova V2 has a 20-word video model and a separate image model for ASL letters and digits. Choose Words, Letters, or Numbers before capture; the API returns up to three candidates from that selected group for review.</p></div><div class="about-graphic"><div class="graphic-ring"></div><div class="graphic-core">✳</div><span class="graphic-word word-one">GESTURE</span><span class="graphic-word word-two">MEANING</span><span class="graphic-word word-three">CONNECTION</span></div></div>
         <div class="section-heading"><div><div class="eyebrow">HOW IT WORKS</div><h2>Three parts. One experience.</h2></div></div>
-        <div class="steps-grid"><div class="step-card"><span>01</span><h3>Capture</h3><p>The browser asks for camera permission and shows the live video preview.</p><small>FRONTEND</small></div><div class="step-card"><span>02</span><h3>Recognize</h3><p>The V2 API samples video frames and returns the three highest-scoring words from its 20 trained labels.</p><small>BACKEND + MODEL</small></div><div class="step-card"><span>03</span><h3>Communicate</h3><p>The interface displays the returned word and confidence and keeps a session-only sentence history.</p><small>FRONTEND</small></div></div>
+        <div class="steps-grid"><div class="step-card"><span>01</span><h3>Capture</h3><p>The browser asks for camera permission and shows the live preview. Use video for words or a hand-centered photo for letters and numbers.</p><small>FRONTEND</small></div><div class="step-card"><span>02</span><h3>Recognize</h3><p>The shared V2 API selects the word or character model and ranks up to three candidates within the chosen type.</p><small>BACKEND + MODEL</small></div><div class="step-card"><span>03</span><h3>Communicate</h3><p>Review and choose a candidate, add it to your text, and use the session history or audio output.</p><small>FRONTEND</small></div></div>
         <div class="notice"><span>◉</span><p><b>Held-out model evaluation.</b> <span id="modelTestSummary">Loading test results…</span> <a href="model-report.json">View the evaluation report</a>.</p></div>
-        <div class="release-card panel"><div><span class="panel-kicker">CURRENT WEBSITE RELEASE</span><strong id="siteVersion">Signova V2.2.0</strong><small>Build <code id="siteBuild">Loading…</code></small></div><a class="btn btn-primary" href="https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo-v2.yml" target="_blank" rel="noopener noreferrer">Choose API demo duration <span>↗</span></a></div>
+        <div class="release-card panel"><div><span class="panel-kicker">CURRENT WEBSITE RELEASE</span><strong id="siteVersion">Signova V2.3.0</strong><small>Build <code id="siteBuild">Loading…</code></small></div><a class="btn btn-primary" href="https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo-v2.yml" target="_blank" rel="noopener noreferrer">Choose API demo duration <span>↗</span></a></div>
         <div class="panel integration-panel"><div class="integration-icon">⌘</div><div><span class="panel-kicker">INTEGRATION STATUS</span><h2>Signova V2 API connection</h2><p>To start a demo, open the <a href="https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo-v2.yml" target="_blank" rel="noopener noreferrer">Signova V2 API workflow</a>, choose a duration, and run it. Wait for <b>Start and verify the API, then get the connected website link</b> to pass; then open <b>Open Signova V2 connected to this live API</b> from the newest run summary. That link pairs the website and API build. Do not reuse a link from an older run. The camera framing guide runs in your browser; clips are sent to the API only after you stop recording.</p><div class="integration-tags"><span id="apiStatus" class="api-health" role="status" aria-live="polite">Checking model connection…</span><span>HTML</span><span>CSS</span><span>JavaScript</span><span>HTTPS API</span><span>20 word classes</span><span>26 letters · 10 digits</span></div></div></div>
       </section>
 

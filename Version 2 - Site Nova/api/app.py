@@ -25,7 +25,7 @@ FRAME_COUNT = 12
 SAMPLE_FPS = 8
 MAX_UPLOAD_BYTES = 80 * 1024 * 1024
 
-app = FastAPI(title="Signova V2 Prediction API", version="2.0.0")
+app = FastAPI(title="Signova V2 Prediction API", version="2.3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -124,7 +124,7 @@ def root() -> dict:
         "service": "Signova V2",
         "health": "/health",
         "prediction": "/api/predict",
-        "prediction_modes": ["words", "characters"],
+        "prediction_modes": ["words", "letters", "numbers"],
     }
 
 
@@ -144,6 +144,14 @@ def health() -> dict:
         "experimental": True,
         "available_modes": {
             "words": {"model_loaded": True, "classes": _info.get("classes", [])},
+            "letters": {
+                "model_loaded": _character_model is not None,
+                "classes": [label for label in _character_classes if len(label) == 1 and label.isalpha()],
+            },
+            "numbers": {
+                "model_loaded": _character_model is not None,
+                "classes": [label for label in _character_classes if len(label) == 1 and label.isdigit()],
+            },
             "characters": {
                 "model_loaded": _character_model is not None,
                 "classes": _character_classes,
@@ -155,11 +163,24 @@ def health() -> dict:
 
 
 @app.post("/api/predict")
-async def predict(file: UploadFile = File(...), mode: str = Form("words")) -> dict:
+async def predict(
+    file: UploadFile = File(...),
+    mode: str = Form("words"),
+    character_kind: str = Form("all"),
+) -> dict:
     if _model is None:
         raise HTTPException(status_code=503, detail="The V2 model is not ready.")
+    if mode in {"letters", "numbers"}:
+        if character_kind not in {"all", mode}:
+            raise HTTPException(status_code=400, detail="The selected mode and character filter do not match.")
+        character_kind = mode
+        mode = "characters"
     if mode not in {"words", "characters"}:
-        raise HTTPException(status_code=400, detail="Choose words or characters prediction mode.")
+        raise HTTPException(status_code=400, detail="Choose words, letters, or numbers prediction mode.")
+    if character_kind not in {"all", "letters", "numbers"}:
+        raise HTTPException(status_code=400, detail="Choose all characters, letters, or numbers.")
+    if mode == "words" and character_kind != "all":
+        raise HTTPException(status_code=400, detail="Character type filters can only be used with the character model.")
     if mode == "characters" and _character_model is None:
         raise HTTPException(status_code=503, detail="The letters and numbers model is not trained or installed yet.")
     payload = await file.read(MAX_UPLOAD_BYTES + 1)
@@ -208,12 +229,23 @@ async def predict(file: UploadFile = File(...), mode: str = Form("words")) -> di
         input_type = "video"
 
     if mode == "characters":
-        classes = _character_classes
+        available_classes = _character_classes
+        if character_kind == "letters":
+            selected_indices = [index for index, label in enumerate(available_classes) if len(label) == 1 and label.isalpha()]
+        elif character_kind == "numbers":
+            selected_indices = [index for index, label in enumerate(available_classes) if len(label) == 1 and label.isdigit()]
+        else:
+            selected_indices = list(range(len(available_classes)))
+        if not selected_indices:
+            raise HTTPException(status_code=503, detail="The selected character classes are missing from the model.")
+        classes = [available_classes[index] for index in selected_indices]
+        candidate_scores = probabilities[selected_indices]
     else:
         classes = _info["classes"]
-    order = np.argsort(probabilities)[::-1][:3]
+        candidate_scores = probabilities
+    order = np.argsort(candidate_scores)[::-1][:3]
     suggestions = [
-        {"word": classes[int(index)], "score": round(float(probabilities[index] * 100), 2)}
+        {"word": classes[int(index)], "score": round(float(candidate_scores[index] * 100), 2)}
         for index in order
     ]
     best = suggestions[0]
@@ -225,6 +257,7 @@ async def predict(file: UploadFile = File(...), mode: str = Form("words")) -> di
         "pose_coverage": None,
         "model_version": "characters-v1" if mode == "characters" else "v2",
         "prediction_mode": mode,
+        "character_kind": character_kind if mode == "characters" else None,
         "input_type": input_type,
         "experimental": True,
     }

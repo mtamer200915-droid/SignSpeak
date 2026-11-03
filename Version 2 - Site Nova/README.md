@@ -4,7 +4,7 @@ Signova V2 is a separate, 20-word ASL video-recognition demo. The original Signo
 
 The model uses RGB video frames, a frozen ImageNet MobileNetV2 encoder, and a temporal Conv1D classifier. It returns three candidate words so the user can review the result. This is an experimental isolated-sign classifier, not continuous sign-language translation, and it does not promise perfect accuracy.
 
-The translator automatically sends a photo to the letters-and-numbers model and a video to the word model. Both use the same FastAPI service and API address. The character model is optional: it is loaded only when its model, `character_class_names.json`, and `character_model_info.json` form a valid matching bundle. If that optional model is missing or invalid, word predictions remain available and the API reports the character model as unavailable. A character can be submitted from a JPG/PNG upload or captured with the camera's **Take photo** button. ASL letter O and numeral 0 share the same static handshape, so language context is needed to distinguish those meanings reliably.
+Select **Words**, **Letters**, or **Numbers** before capture. Words use a short video; letters and numbers use one photo. Both character modes use the same image model and FastAPI service, while the selected mode filters model candidates to A–Z or 0–9. The browser also crops around the detected hand before sending a camera photo. A JPG/PNG upload is supported for character predictions. The character model is optional: it is loaded only when its model, `character_class_names.json`, and `character_model_info.json` form a valid matching bundle. If that bundle is missing or invalid, word predictions remain available and the API reports a character-model error when a photo is submitted. ASL letter O and numeral 0 share the same static handshape, so the selected mode supplies the meaning category but does not increase the model's visual accuracy.
 
 ## Dataset and attribution
 
@@ -14,7 +14,7 @@ Short signer-cropped clips are included in `data/clips/` with the dataset-specif
 
 ## Prepare and train
 
-The checkout includes 736 usable clips: 533 train, 121 validation, and 82 test. Another 416 of the 1,152 manifest candidates are unavailable locally. The training script requires at least 18 clips per word, but some test classes have only one or two examples. The current held-out report is 25.6% top-1 and 48.8% top-3 accuracy across 82 clips, so the model remains experimental and is not dependable yet.
+The checkout includes 736 usable clips: 533 train, 121 validation, and 82 test. Another 416 of the 1,152 manifest candidates are unavailable locally. The training script requires at least 18 clips per word, but some test classes have only one or two examples. The current held-out report is 25.6% top-1 and 48.8% top-3 accuracy across 82 clips, so the word model remains experimental and is not dependable yet. The category selector does not retrain or improve this word model.
 
 The selected, signer-cropped train/validation/test clips are included in `data/clips/`, so the delivered model can be retrained without downloading the full source archives. From this directory, install the Python dependencies and train:
 
@@ -51,7 +51,7 @@ Install `api/requirements.txt`, then start the API from this directory:
 python -m uvicorn app:app --app-dir api --host 127.0.0.1 --port 8000
 ```
 
-In a second terminal, serve the website with `python -m http.server 8080 --directory web`, then open `http://127.0.0.1:8080/?api=http://127.0.0.1:8000`. The V2 API offers `/health` and `/api/predict`; the same upload route accepts multipart `mode=words` or `mode=characters` and selects the corresponding model inside one API service.
+In a second terminal, serve the website with `python -m http.server 8080 --directory web`, then open `http://127.0.0.1:8080/?api=http://127.0.0.1:8000`. The V2 API offers `/health` and `/api/predict`; the same upload route accepts multipart `mode=words` or `mode=characters`. Character requests also send `character_kind=letters` or `character_kind=numbers`, so the API returns the top three candidates from only the selected category. No second API process is needed.
 
 ## GitHub Pages and temporary API
 
