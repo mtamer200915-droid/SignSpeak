@@ -30,11 +30,12 @@
   }
   const requestedApi = new URLSearchParams(window.location.search).get("api");
   const requestedBuild = new URLSearchParams(window.location.search).get("build");
+  const configuredApiBuild = window.SIGNOVA_API_BUILD || "";
   const runningScript = document.currentScript || [...document.scripts].find(script => script.src.includes("app.js"));
   const currentBuild = runningScript?.src ? new URL(runningScript.src, document.baseURI).searchParams.get("build") : null;
   const websiteBuildMismatch = Boolean(requestedBuild && currentBuild && requestedBuild !== currentBuild);
   function resolveApiBase() {
-    const configuredApi = window.SIGNOVA_API_BASE || requestedApi;
+    const configuredApi = requestedApi || window.SIGNOVA_API_BASE;
     if (configuredApi) {
       try {
         const candidate = new URL(configuredApi, window.location.href);
@@ -221,7 +222,7 @@
       setText(versionLabel, `Signova V${release.version}`);
       setText(buildLabel, String(release.build || currentBuild || "local").slice(0, 7));
     } catch {
-      setText(versionLabel, "Signova V2.3.4");
+      setText(versionLabel, "Signova V2.3.5");
       setText(buildLabel, String(currentBuild || "local").slice(0, 7));
     }
   }
@@ -283,7 +284,7 @@
     if (apiBuildMismatch) {
       elements.apiExpiryNotice.hidden = false;
       elements.apiExpiryNotice.classList.remove("expired");
-      setText(elements.apiExpiryMessage, "This website and prediction API are from different builds. Open the current connected Signova link provided by the presenter.");
+      setText(elements.apiExpiryMessage, "This website and API are from different builds. Open the stable Signova V2 website address.");
       return;
     }
     if (demoExpiresAt === null && !lastHealthError) {
@@ -294,8 +295,8 @@
       elements.apiExpiryNotice.hidden = false;
       elements.apiExpiryNotice.classList.remove("expired");
       setText(elements.apiExpiryMessage, apiBuildMismatch
-        ? "This website link belongs to an older build. Open the current connected Signova link provided by the presenter."
-        : "This page has no API address. Open the current connected Signova website link provided by the presenter.");
+        ? "This website link is outdated. Open the stable Signova V2 website address."
+        : "The stable website is waiting for the presenter to start and publish a V2 API session. Reload this page after it is ready.");
       return;
     }
     const secondsLeft = demoExpiresAt === null ? null : Math.ceil((demoExpiresAt - Date.now()) / 1000);
@@ -343,7 +344,7 @@
       apiAddressMissing = true;
       lastHealthError = true;
       updateApiExpiryNotice();
-      setApiStatus(apiBuildMismatch ? "Old website or API build · open the newest connected link" : "API address missing · ask for the current connected website link");
+      setApiStatus(apiBuildMismatch ? "Old website or API build · open the stable V2 website" : "Waiting for the presenter to start the V2 API session");
       elements.apiStatus.classList.remove("ready", "warning");
       elements.apiStatus.classList.add("error");
       return;
@@ -364,7 +365,8 @@
           || !Array.isArray(health.classes) || health.classes.length !== 20) {
           throw new Error("Model is not ready");
         }
-        if (requestedApi && requestedBuild && health.build_sha !== requestedBuild) {
+        const expectedApiBuild = requestedApi ? requestedBuild : configuredApiBuild;
+        if (expectedApiBuild && health.build_sha !== expectedApiBuild) {
           apiBuildMismatch = true;
           throw new Error("Website and API build do not match");
         }
@@ -397,10 +399,10 @@
         lastHealthError = true;
         updateApiExpiryNotice();
         setApiStatus(apiBuildMismatch
-          ? "API build mismatch · open the newest connected website link"
+          ? "API build mismatch · open the stable V2 website"
           : requestedApi
           ? "API unavailable · automatic retry is ready"
-          : "API not configured · ask for the current connected website link");
+          : "API not configured · the presenter must start a V2 session, then reload this page");
         elements.apiStatus.classList.remove("ready", "warning");
         elements.apiStatus.classList.add("error");
       }
@@ -1023,18 +1025,18 @@
       elements.addWord.disabled = true;
       elements.flipCamera.disabled = !state.stream;
       setEnglishText(elements.sentenceFeedback, apiBuildMismatch
-        ? "This website and API build do not match. Open the current connected Signova link provided by the presenter."
-        : "This page has no connected API address. Open the current connected Signova website link provided by the presenter.");
+        ? "This website and API build do not match. Reload the stable Signova V2 website after the presenter starts a new session."
+        : "The stable website is waiting for the presenter to start and publish a V2 API session. Reload this page after it is ready.");
       elements.startSign.disabled = !state.stream || (!state.isFramingReady && !state.manualPoseFallback);
       if (state.stream) {
         setEnglishText(elements.cameraStatus, "Prediction API offline");
-        setEnglishText(elements.cameraHelp, "The recording is ready, but this page has no API address. Open the current connected Signova website link provided by the presenter.");
+        setEnglishText(elements.cameraHelp, "The recording is ready, but the API is not connected. Ask the presenter to start the V2 API session, then reload the stable website.");
         elements.framingGuide.dataset.state = "manual";
         elements.cameraStage.dataset.framing = "manual";
         setEnglishText(elements.framingTitle, "Prediction API offline");
-        setEnglishText(elements.framingMessage, "Your recording could not be sent. Open the current connected Signova website link provided by the presenter.");
+        setEnglishText(elements.framingMessage, "Your recording could not be sent. Ask the presenter to start the V2 API session, then reload the stable website.");
       }
-      toast("No connected prediction API address.");
+      toast("Waiting for the presenter to start the V2 API session.");
       elements.takePicture.disabled = !state.stream;
       return;
     }
@@ -1137,7 +1139,7 @@
       let failureMessage = error.message;
       let toastMessage = failureMessage;
       if (characterModelMissing) {
-        failureMessage = "The connected API does not have the letters-and-numbers model loaded. Start the latest Signova V2 API and open the connected website link from its run summary.";
+        failureMessage = "The connected API does not have the letters-and-numbers model loaded. Start the latest V2 API session, then reload the stable Signova V2 website.";
         toastMessage = "Character model unavailable on this API. Open the latest connected V2 website link.";
       } else if (signerMissing) {
         failureMessage = isCharacters
@@ -1168,7 +1170,7 @@
       if (state.stream) {
         setEnglishText(elements.cameraStatus, characterModelMissing ? "Character model unavailable" : "Ready to try again");
         setEnglishText(elements.cameraHelp, characterModelMissing
-          ? "The connected API needs its character model loaded. Open the connected website link from the latest Signova V2 API run."
+          ? "The connected API needs its character model loaded. Start the latest V2 API session, then reload the stable website."
           : signerMissing
           ? "No signer was detected. Face the camera and perform the sign yourself, or upload the original video file. Filming a screen is not supported."
           : "The clip was not analyzed. Correct the camera framing if needed, then record again; temporary API failures are retried automatically.");
@@ -1176,7 +1178,7 @@
         elements.cameraStage.dataset.framing = state.isFramingReady ? "ready" : "adjust";
         setEnglishText(elements.framingTitle, characterModelMissing ? "Character model unavailable" : "Prediction unavailable");
         setEnglishText(elements.framingMessage, characterModelMissing
-          ? "The current API session cannot predict letters or numbers. Start the latest V2 API workflow and use its connected website link."
+          ? "The current API session cannot predict letters or numbers. Start the latest V2 API workflow, then reload the stable Signova V2 website."
           : signerMissing
           ? "Show the signer in the camera, or upload the original video file."
           : canRetryAutomatically

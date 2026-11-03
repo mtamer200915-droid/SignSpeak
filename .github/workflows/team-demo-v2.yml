@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: signova-v2-team-demo
@@ -200,10 +201,11 @@ jobs:
           PY
           fi
 
-      - name: Start and verify the API, then get the connected website link
+      - name: Connect the stable website to this API and verify it
         shell: bash
         env:
           DEMO_MINUTES: ${{ inputs.duration_minutes }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           cloudflared_path="$RUNNER_TEMP/cloudflared"
@@ -257,23 +259,42 @@ jobs:
           fi
           website_version=$(python -c 'import json,sys; print(json.loads(sys.argv[1])["version"])' "$site_version")
 
+          gh variable set SIGNOVA_V2_API_BASE --body "$api_url" --repo "$GITHUB_REPOSITORY"
+          gh variable set SIGNOVA_V2_API_BUILD --body "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
+          gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main
+          config_ready=0
+          for attempt in $(seq 1 60); do
+            api_config=$(curl --silent --fail "https://mtamer200915-droid.github.io/SignSpeak/v2/api-config.js?check=${GITHUB_RUN_ID}" || true)
+            if printf '%s' "$api_config" | grep -Fq "window.SIGNOVA_API_BASE = \"${api_url}\";" \
+              && printf '%s' "$api_config" | grep -Fq "window.SIGNOVA_API_BUILD = \"${GITHUB_SHA}\";"; then
+              config_ready=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$config_ready" -ne 1 ]; then
+            echo "The stable website did not publish the current API connection settings in time."
+            exit 1
+          fi
+
           expires_at=$(date -u -d "+${DEMO_MINUTES} minutes" +%s)
           echo "$expires_at" >/tmp/signova-v2-expires-at
-          site_url="https://mtamer200915-droid.github.io/SignSpeak/v2/?api=${api_url}&build=${GITHUB_SHA}"
+          site_url="https://mtamer200915-droid.github.io/SignSpeak/v2/"
           {
             echo "## Signova V2 ${website_version} demo is ready"
-            echo "- [Open Signova V2 ${website_version} connected to this live API](${site_url})"
+            echo "- [Open the stable Signova V2 website](${site_url})"
             echo "- API health: [${api_url}/health](${api_url}/health)"
             echo "- Website and API build: ${GITHUB_SHA:0:7}"
             echo "- This shared API stays online for **${DEMO_MINUTES} minutes** after the public check."
+            echo "- The QR code can keep using the same website URL. Each successful API session updates the connection behind that URL."
             echo "- Word-video labels: book, deaf, eat, drink, family, go, happy, help, home, like, mother, need, no, not, please, school, water, want, yes, you."
             echo "- Photo-character labels: A–Z, 0–9, DELETE, NOTHING, SPACE, and UNKNOWN. Photos use the character model; videos use the word model through the same API."
             echo "- Character image holdout: 88.3% Top-1 and 97.1% Top-3 across 1,575 images; this is not independent camera accuracy."
             echo "- The upload smoke check verifies wiring only; the independent accuracy result is listed on the site."
-            echo "- Start future demos from [the Signova V2 API workflow](https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo-v2.yml), choose a duration, and use the connected link from the newest run summary."
+            echo "- Start future demos from [the Signova V2 API workflow](https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo-v2.yml), choose a duration, and keep using this same website URL after the Pages refresh completes."
             echo "- The temporary API URL is public. Use demo clips only."
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "Connected website: ${site_url}"
+          echo "Stable website: ${site_url}"
           echo "SIGNOVA_V2_DEMO_API_URL=${api_url}" >> "$GITHUB_ENV"
           echo "SIGNOVA_V2_DEMO_EXPIRES_AT=${expires_at}" >> "$GITHUB_ENV"
 

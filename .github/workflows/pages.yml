@@ -18,6 +18,9 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      SIGNOVA_V2_API_BASE: ${{ vars.SIGNOVA_V2_API_BASE }}
+      SIGNOVA_V2_API_BUILD: ${{ vars.SIGNOVA_V2_API_BUILD }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -61,6 +64,21 @@ jobs:
           cp -R "Version 2 - Site Nova/learning/word-sign-videos/." site/v2/learning/word-sign-videos/
           website_version=$(python3 -c 'import json; print(json.load(open("Version 2 - Site Nova/web/version.json"))["version"])')
           printf '{"version":"%s","build":"%s"}\n' "$website_version" "$GITHUB_SHA" > site/v2/version.json
+          python3 - "$SIGNOVA_V2_API_BASE" "$SIGNOVA_V2_API_BUILD" > site/v2/api-config.js <<'PY'
+          import json
+          import sys
+          from urllib.parse import urlparse
+
+          api_base, api_build = sys.argv[1:]
+          if api_base:
+              parsed = urlparse(api_base)
+              if parsed.scheme != "https" or not parsed.netloc or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+                  raise SystemExit("SIGNOVA_V2_API_BASE must be an HTTPS API origin without a path or query.")
+          print(f"window.SIGNOVA_API_BASE = {json.dumps(api_base)};")
+          print(f"window.SIGNOVA_API_BUILD = {json.dumps(api_build)};")
+          PY
+          api_config_revision=$(printf '%s|%s' "$SIGNOVA_V2_API_BASE" "$SIGNOVA_V2_API_BUILD" | sha256sum | cut -c1-16)
+          sed -i "s#src=\"api-config.js\"#src=\"api-config.js?connection=${api_config_revision}\"#" site/v2/index.html
           sed -i "s#src=\"app.js\"#src=\"app.js?build=${GITHUB_SHA}\"#" site/v2/index.html
           touch site/.nojekyll
 
