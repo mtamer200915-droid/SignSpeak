@@ -33,7 +33,7 @@
   const configuredApiBuild = window.SIGNOVA_API_BUILD || "";
   const runningScript = document.currentScript || [...document.scripts].find(script => script.src.includes("app.js"));
   const currentBuild = runningScript?.src ? new URL(runningScript.src, document.baseURI).searchParams.get("build") : null;
-  const websiteBuildMismatch = Boolean(requestedBuild && currentBuild && requestedBuild !== currentBuild);
+  const websiteBuildMismatch = Boolean(requestedApi && requestedBuild && currentBuild && requestedBuild !== currentBuild);
   function resolveApiBase() {
     const configuredApi = requestedApi || window.SIGNOVA_API_BASE;
     if (configuredApi) {
@@ -222,7 +222,7 @@
       setText(versionLabel, `Signova V${release.version}`);
       setText(buildLabel, String(release.build || currentBuild || "local").slice(0, 7));
     } catch {
-      setText(versionLabel, "Signova V2.3.5");
+      setText(versionLabel, "Signova V2.3.6");
       setText(buildLabel, String(currentBuild || "local").slice(0, 7));
     }
   }

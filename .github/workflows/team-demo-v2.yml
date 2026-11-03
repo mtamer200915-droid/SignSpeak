@@ -279,7 +279,7 @@ jobs:
 
           expires_at=$(date -u -d "+${DEMO_MINUTES} minutes" +%s)
           echo "$expires_at" >/tmp/signova-v2-expires-at
-          site_url="https://mtamer200915-droid.github.io/SignSpeak/v2/"
+          site_url="https://mtamer200915-droid.github.io/SignSpeak/v2/?build=df9028e"
           {
             echo "## Signova V2 ${website_version} demo is ready"
             echo "- [Open the stable Signova V2 website](${site_url})"
