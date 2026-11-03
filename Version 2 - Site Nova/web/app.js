@@ -221,7 +221,7 @@
       setText(versionLabel, `Signova V${release.version}`);
       setText(buildLabel, String(release.build || currentBuild || "local").slice(0, 7));
     } catch {
-      setText(versionLabel, "Signova V2.4.0");
+      setText(versionLabel, "Signova V2.4.1");
       setText(buildLabel, String(currentBuild || "local").slice(0, 7));
     }
   }

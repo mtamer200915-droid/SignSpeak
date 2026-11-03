@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
@@ -10,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import tensorflow as tf
+from PIL import Image, ImageOps
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi import Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -248,9 +250,12 @@ async def predict(
 
     if mode == "characters" and is_image:
         try:
-            image = tf.io.decode_image(payload, channels=3, expand_animations=False)
-            image = tf.image.resize(image, (SIZE, SIZE), antialias=True)
-            character_input = tf.cast(image, tf.float32)[None, ...]
+            # Match the PIL RGB/bilinear preprocessing used to train and
+            # evaluate the image models, including phone EXIF orientation.
+            with Image.open(io.BytesIO(payload)) as source:
+                image = ImageOps.exif_transpose(source).convert("RGB")
+                image = image.resize((SIZE, SIZE), Image.Resampling.BILINEAR)
+                character_input = np.asarray(image, dtype=np.float32)[None, ...]
         except Exception as exc:
             raise HTTPException(status_code=422, detail="The image could not be decoded. Use a clear JPG or PNG photo.") from exc
         image_model = _digit_model if use_digit_model else (_letter_model if use_letter_model else _character_model)

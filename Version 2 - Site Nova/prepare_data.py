@@ -253,8 +253,12 @@ def yt_dlp_command(url: str, output: Path, ffmpeg: Path) -> tuple[bool, str]:
     return False, detail
 
 
-def crop_expression(box: list[float]) -> str:
-    x1, y1, x2, y2 = box
+def crop_expression(box: list[float], dataset: str = "") -> str:
+    # MS-ASL supplies [y0, x0, y1, x1]; other sources use x/y order.
+    if dataset == "MS-ASL":
+        y1, x1, y2, x2 = box
+    else:
+        x1, y1, x2, y2 = box
     center_x = (x1 + x2) / 2
     center_y = (y1 + y2) / 2
     # Square crop avoids letterboxing while keeping hands and face visible.
@@ -281,7 +285,7 @@ def make_clip(record: dict, source: Path, destination: Path, ffmpeg: Path) -> tu
     else:
         command += ["-i", str(source)]
     command += [
-        "-an", "-vf", crop_expression(record["box"]), "-c:v", "libx264", "-preset", "veryfast",
+        "-an", "-vf", crop_expression(record["box"], record["dataset"]), "-c:v", "libx264", "-preset", "veryfast",
         "-crf", "25", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", str(destination),
     ]
     completed = subprocess.run(command, capture_output=True, text=True, timeout=120)

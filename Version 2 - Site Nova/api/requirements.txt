@@ -1,6 +1,7 @@
 fastapi>=0.115,<1
 imageio-ffmpeg>=0.6,<1
 numpy>=1.26,<2.2
+Pillow>=10.2,<13
 python-multipart>=0.0.9,<1
 tensorflow-cpu>=2.16,<2.22
 uvicorn[standard]>=0.30,<1

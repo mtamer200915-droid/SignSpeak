@@ -12,6 +12,8 @@ The letter candidate was trained on 600 images per letter and scored 95.8% on 1,
 
 The data manifest selects source clips from **MS-ASL** and adds locally available WLASL training clips when supplied. MS-ASL provides separate train, validation, and test partitions. The preparation script removes source-video overlap across those partitions. It downloads each selected source locally and crops the annotated sign segment and signer region.
 
+MS-ASL bounding boxes are stored in `[y0, x0, y1, x1]` order. The preparation script now interprets that order correctly. Existing clips and the published word model were created before this correction; they must be re-prepared and independently evaluated before assuming any improvement in word accuracy.
+
 Short signer-cropped clips are included in `data/clips/` with the dataset-specific C-UDA copies in `data/licenses/`. Untrimmed originals and temporary downloads stay in ignored local folders. `data/manifest.jsonl` records the selected source IDs, URLs, labels, and timings; `prepare_data.py` can re-fetch clips from those sources. Follow the dataset terms and attribution when using or redistributing the data. Read the [MS-ASL download page](https://www.microsoft.com/en-us/download/details.aspx?id=100121), the [WLASL dataset page](https://github.com/dxli94/WLASL), and Microsoft's [C-UDA terms](https://github.com/microsoft/Computational-Use-of-Data-Agreement).
 
 ## Prepare and train
