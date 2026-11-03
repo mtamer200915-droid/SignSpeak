@@ -25,7 +25,7 @@ FRAME_COUNT = 12
 SAMPLE_FPS = 8
 MAX_UPLOAD_BYTES = 80 * 1024 * 1024
 
-app = FastAPI(title="Signova V2 Prediction API", version="2.3.0")
+app = FastAPI(title="Signova V2 Prediction API", version="2.3.1")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

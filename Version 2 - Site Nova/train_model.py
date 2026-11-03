@@ -115,7 +115,37 @@ def class_counts(rows: list[dict]) -> dict[str, int]:
     return {word: sum(1 for row in rows if row["word"] == word) for word in WORDS}
 
 
-def train(manifest: Path, epochs: int = 80) -> dict:
+def apply_training_profile(records: dict[str, list[dict]], profile: str) -> dict[str, list[dict]]:
+    """Vary training-set size while preserving the same independent test clips."""
+    if profile == "baseline":
+        return records
+    updated = {split: list(rows) for split, rows in records.items()}
+    if profile == "reduced":
+        selected = []
+        for index, word in enumerate(WORDS):
+            examples = [row for row in records["train"] if row["word"] == word]
+            random.Random(SEED + index).shuffle(examples)
+            keep = max(12, int(len(examples) * 0.75))
+            selected.extend(examples[:keep])
+        updated["train"] = selected
+        return updated
+    if profile == "expanded":
+        training = list(records["train"])
+        validation = []
+        for index, word in enumerate(WORDS):
+            examples = [row for row in records["val"] if row["word"] == word]
+            random.Random(SEED + index).shuffle(examples)
+            if len(examples) < 3:
+                raise RuntimeError(f"The expanded profile needs three validation clips for {word}.")
+            validation.extend(examples[:3])
+            training.extend(examples[3:])
+        updated["train"] = training
+        updated["val"] = validation
+        return updated
+    raise ValueError(f"Unknown training profile: {profile}")
+
+
+def train(manifest: Path, epochs: int = 80, profile: str = "baseline", output_dir: Path = MODEL_DIR) -> dict:
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
     random.seed(SEED)
     np.random.seed(SEED)
@@ -126,10 +156,11 @@ def train(manifest: Path, epochs: int = 80) -> dict:
     tf.config.threading.set_inter_op_parallelism_threads(2)
 
     records, missing = read_records(manifest)
+    records = apply_training_profile(records, profile)
     for split in ("train", "val", "test"):
         counts = class_counts(records[split])
         print(f"{split}: {counts}", flush=True)
-        minimum = 18 if split == "train" else 3 if split == "val" else 1
+        minimum = 12 if split == "train" and profile == "reduced" else 18 if split == "train" else 3 if split == "val" else 1
         short = [word for word, count in counts.items() if count < minimum]
         if short:
             raise RuntimeError(f"Not enough {split} clips for {', '.join(short)}: {counts}")
@@ -217,8 +248,8 @@ def train(manifest: Path, epochs: int = 80) -> dict:
     embedded = tf.keras.layers.TimeDistributed(encoder, name="frame_encoder")(frame_input)
     final_output = classifier(embedded)
     inference_model = tf.keras.Model(frame_input, final_output, name="signova_v2")
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    model_path = MODEL_DIR / "signova_v2.keras"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    model_path = output_dir / "signova_v2.keras"
     inference_model.save(model_path)
 
     report = {
@@ -245,6 +276,7 @@ def train(manifest: Path, epochs: int = 80) -> dict:
             "epochs_ran": len(history.history.get("loss", [])),
             "best_validation_accuracy": float(max(history.history.get("val_accuracy", [0]))),
             "seed": SEED,
+            "profile": profile,
         },
         "missing_candidate_clips_skipped_count": len(missing),
         "source_attribution": {
@@ -253,8 +285,8 @@ def train(manifest: Path, epochs: int = 80) -> dict:
         },
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    (MODEL_DIR / "model_info.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    (MODEL_DIR / "class_names.json").write_text(json.dumps(list(WORDS), indent=2), encoding="utf-8")
+    (output_dir / "model_info.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    (output_dir / "class_names.json").write_text(json.dumps(list(WORDS), indent=2), encoding="utf-8")
     site_report = {
         "classes": list(WORDS),
         "test": report["test"],
@@ -262,7 +294,8 @@ def train(manifest: Path, epochs: int = 80) -> dict:
         "note": "Held-out test results from this dataset only. This does not guarantee future predictions.",
         "generated_at_utc": report["generated_at_utc"],
     }
-    (PROJECT / "web" / "model-report.json").write_text(json.dumps(site_report, indent=2), encoding="utf-8")
+    if output_dir.resolve() == MODEL_DIR.resolve():
+        (PROJECT / "web" / "model-report.json").write_text(json.dumps(site_report, indent=2), encoding="utf-8")
     print(json.dumps({"model": str(model_path), "test": report["test"], "samples": report["samples"]}, indent=2))
     return report
 
@@ -271,8 +304,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=DATA / "manifest.jsonl")
     parser.add_argument("--epochs", type=int, default=80)
+    parser.add_argument("--profile", choices=("reduced", "baseline", "expanded"), default="baseline",
+                        help="Compare fewer, current, or more training clips without changing the held-out test set.")
+    parser.add_argument("--output-dir", type=Path, default=MODEL_DIR,
+                        help="Directory for the model and report; the website report updates only for the default model directory.")
     args = parser.parse_args()
-    train(args.manifest, max(1, args.epochs))
+    train(args.manifest, max(1, args.epochs), args.profile, args.output_dir)
 
 
 if __name__ == "__main__":

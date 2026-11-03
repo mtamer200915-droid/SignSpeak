@@ -1,0 +1,78 @@
+name: Compare Signova V2 training sizes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signova-v2-training-experiments
+  cancel-in-progress: false
+
+jobs:
+  train-candidate:
+    name: Train ${{ matrix.profile }} profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [reduced, baseline, expanded]
+    steps:
+      - name: Check out the V2 clips and training code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: Version 2 - Site Nova/requirements-training.txt
+
+      - name: Install V2 training dependencies
+        working-directory: Version 2 - Site Nova
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-training.txt
+
+      - name: Train and compare against the unchanged held-out split
+        working-directory: Version 2 - Site Nova
+        env:
+          TF_CPP_MIN_LOG_LEVEL: "2"
+          OMP_NUM_THREADS: "4"
+          PROFILE: ${{ matrix.profile }}
+          OUTPUT_DIR: ${{ runner.temp }}/signova-v2-${{ matrix.profile }}
+        run: python train_model.py --profile "$PROFILE" --output-dir "$OUTPUT_DIR" --epochs 80
+
+      - name: Summarize validation and test results
+        working-directory: Version 2 - Site Nova
+        env:
+          PROFILE: ${{ matrix.profile }}
+          OUTPUT_DIR: ${{ runner.temp }}/signova-v2-${{ matrix.profile }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          report = json.loads((Path(os.environ["OUTPUT_DIR"]) / "model_info.json").read_text())
+          val = report["validation"]
+          test = report["test"]
+          counts = report["samples"]
+          summary = [
+              f"### Signova V2 {os.environ['PROFILE']} training profile",
+              f"- Clips: train {sum(counts['train'].values())}, validation {sum(counts['val'].values())}, test {sum(counts['test'].values())}.",
+              f"- Validation Top-1: {val['top1_accuracy']:.1%}; Top-3: {val['top3_accuracy']:.1%}.",
+              f"- Held-out test Top-1: {test['top1_accuracy']:.1%}; Top-3: {test['top3_accuracy']:.1%} across {test['clip_count']} clips.",
+              "- The test clips are unchanged between profiles. Compare profiles using validation results; do not choose a model by repeatedly tuning against the test score.",
+          ]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
+              stream.write("\n".join(summary) + "\n")
+          PY
+
+      - name: Save this candidate for review (does not replace the live model)
+        uses: actions/upload-artifact@v5
+        with:
+          name: signova-v2-${{ matrix.profile }}-candidate
+          path: ${{ runner.temp }}/signova-v2-${{ matrix.profile }}
+          if-no-files-found: error

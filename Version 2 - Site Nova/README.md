@@ -16,6 +16,8 @@ Short signer-cropped clips are included in `data/clips/` with the dataset-specif
 
 The checkout includes 736 usable clips: 533 train, 121 validation, and 82 test. Another 416 of the 1,152 manifest candidates are unavailable locally. The training script requires at least 18 clips per word, but some test classes have only one or two examples. The current held-out report is 25.6% top-1 and 48.8% top-3 accuracy across 82 clips, so the word model remains experimental and is not dependable yet. The category selector does not retrain or improve this word model.
 
+To compare how training-set size affects results without changing the held-out test videos, run **Compare Signova V2 training sizes** in GitHub Actions. The reduced, current, and expanded profiles keep the original test set unchanged; the expanded profile leaves three validation examples per word and moves the other validation clips into training. Compare candidates using validation results, then treat test results as a final diagnostic rather than choosing whichever profile happens to score highest on the small test set. Candidate models are uploaded as artifacts and do not replace the live API model automatically.
+
 The selected, signer-cropped train/validation/test clips are included in `data/clips/`, so the delivered model can be retrained without downloading the full source archives. From this directory, install the Python dependencies and train:
 
 ```powershell
