@@ -73,10 +73,10 @@
         <div class="api-expiry-notice" id="apiExpiryNotice" role="status" aria-live="polite" hidden><span aria-hidden="true">ⓘ</span><p id="apiExpiryMessage"></p></div>
         <div class="recognition-selector panel">
           <div><span class="panel-kicker">RECOGNITION TYPE</span><strong>What are you signing?</strong><p id="recognitionModeHelp">Words use a short video. Letters and numbers use one clear photo.</p></div>
-          <div class="recognition-mode-buttons" role="group" aria-label="Choose what to recognize">
-            <button class="recognition-mode active" type="button" data-recognition-mode="words" aria-pressed="true">Words <small>Video</small></button>
-            <button class="recognition-mode" type="button" data-recognition-mode="letters" aria-pressed="false">Letters <small>Photo</small></button>
-            <button class="recognition-mode" type="button" data-recognition-mode="numbers" aria-pressed="false">Numbers <small>Photo</small></button>
+          <div class="recognition-mode-buttons" role="radiogroup" aria-label="Choose what to recognize">
+            <label class="recognition-mode active" data-recognition-mode="words"><input type="radio" name="recognitionMode" value="words" checked /><span>Words</span><small>Video</small></label>
+            <label class="recognition-mode" data-recognition-mode="letters"><input type="radio" name="recognitionMode" value="letters" /><span>Letters</span><small>Photo</small></label>
+            <label class="recognition-mode" data-recognition-mode="numbers"><input type="radio" name="recognitionMode" value="numbers" /><span>Numbers</span><small>Photo</small></label>
           </div>
         </div>
         <div class="translator-layout">
@@ -95,7 +95,7 @@
             </div>
             <div class="camera-controls"><button class="btn btn-primary" id="startCamera">Start camera <span>↗</span></button><button class="btn btn-primary" id="startSign" disabled>Start sign <span>●</span></button><button class="btn btn-primary" id="takePicture" disabled>Take photo <span>◎</span></button><button class="btn btn-ghost" id="stopCamera" disabled>Stop sign &amp; predict</button><button class="btn btn-ghost" id="restartCapture" disabled hidden>Restart capture</button><button class="btn btn-ghost" id="flipCamera" disabled title="Switch between the front and rear cameras">Flip camera <span>↻</span></button><button class="btn btn-ghost" id="cameraOff" disabled>Stop camera</button><button class="icon-btn" id="flipHint" title="Camera tips" aria-label="Camera tips">?</button></div>
             <p class="helper-text" id="cameraHelp">Start the camera first. The local framing guide checks that your face and shoulders are visible before you record. Perform the sign yourself in front of the camera; showing a video on another screen may not be recognized.</p>
-            <p class="api-help">The GitHub Actions API demo is temporary. Start it from the Signova V2 API workflow, choose how long it should run, then open the connected website link in that run's summary.</p>
+            <p class="api-help">Predictions require an active Signova API connection. If the API is unavailable, ask the presenter for the current connected website link.</p>
           </div>
           <div class="right-stack">
             <div class="panel prediction-panel">
@@ -103,7 +103,7 @@
               <div class="prediction-content"><div class="prediction-orb">✦</div><div><span class="tiny-label" id="recognizedTypeLabel">RECOGNIZED WORD</span><h3 id="predictedWord" data-no-translate>Waiting<span>.</span></h3><p id="predictionDescription">Record a sign or upload a video to get a prediction.</p></div></div>
               <div class="confidence-row"><div class="confidence-label"><span id="confidenceLabel">Local model score</span><b id="confidenceText">—</b></div><div class="confidence-track"><span id="confidenceBar"></span></div></div>
               <div class="prediction-suggestions" id="predictionSuggestions" role="group" aria-label="Model options" hidden><span id="suggestionHeading">Top model options</span><div class="suggestion-list"></div></div>
-              <button class="btn btn-outline full-width" id="demoPrediction">Upload word video <span>✦</span></button>
+              <button class="btn btn-outline full-width" id="demoPrediction">Upload video <span>✦</span></button>
               <p class="sample-warning">Experimental model score, not a guarantee. Verify each word before adding it.</p>
             </div>
             <div class="panel sentence-panel">
@@ -140,8 +140,8 @@
         <div class="section-heading"><div><div class="eyebrow">HOW IT WORKS</div><h2>Three parts. One experience.</h2></div></div>
         <div class="steps-grid"><div class="step-card"><span>01</span><h3>Capture</h3><p>The browser asks for camera permission and shows the live preview. Use video for words or a hand-centered photo for letters and numbers.</p><small>FRONTEND</small></div><div class="step-card"><span>02</span><h3>Recognize</h3><p>The shared V2 API selects the word or character model and ranks up to three candidates within the chosen type.</p><small>BACKEND + MODEL</small></div><div class="step-card"><span>03</span><h3>Communicate</h3><p>Review and choose a candidate, add it to your text, and use the session history or audio output.</p><small>FRONTEND</small></div></div>
         <div class="notice"><span>◉</span><p><b>Held-out model evaluation.</b> <span id="modelTestSummary">Loading test results…</span> <a href="model-report.json">View the evaluation report</a>.</p></div>
-        <div class="release-card panel"><div><span class="panel-kicker">CURRENT WEBSITE RELEASE</span><strong id="siteVersion">Signova V2.3.1</strong><small>Build <code id="siteBuild">Loading…</code></small></div><a class="btn btn-primary" href="https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo-v2.yml" target="_blank" rel="noopener noreferrer">Choose API demo duration <span>↗</span></a></div>
-        <div class="panel integration-panel"><div class="integration-icon">⌘</div><div><span class="panel-kicker">INTEGRATION STATUS</span><h2>Signova V2 API connection</h2><p>To start a demo, open the <a href="https://github.com/mtamer200915-droid/SignSpeak/actions/workflows/team-demo-v2.yml" target="_blank" rel="noopener noreferrer">Signova V2 API workflow</a>, choose a duration, and run it. Wait for <b>Start and verify the API, then get the connected website link</b> to pass; then open <b>Open Signova V2 connected to this live API</b> from the newest run summary. That link pairs the website and API build. Do not reuse a link from an older run. The camera framing guide runs in your browser; clips are sent to the API only after you stop recording.</p><div class="integration-tags"><span id="apiStatus" class="api-health" role="status" aria-live="polite">Checking model connection…</span><span>HTML</span><span>CSS</span><span>JavaScript</span><span>HTTPS API</span><span>20 word classes</span><span>26 letters · 10 digits</span></div></div></div>
+        <div class="release-card panel"><div><span class="panel-kicker">CURRENT WEBSITE RELEASE</span><strong id="siteVersion">Signova V2.3.4</strong><small>Build <code id="siteBuild">Loading…</code></small></div></div>
+        <div class="panel integration-panel"><div class="integration-icon">⌘</div><div><span class="panel-kicker">INTEGRATION STATUS</span><h2>Signova V2 API connection</h2><p>The website reports the API connection status here. Predictions require the active connected Signova website link provided by the presenter. The camera framing guide runs in your browser; clips are sent to the API only after you stop recording.</p><div class="integration-tags"><span id="apiStatus" class="api-health" role="status" aria-live="polite">Checking model connection…</span><span>HTML</span><span>CSS</span><span>JavaScript</span><span>HTTPS API</span><span>20 word classes</span><span>26 letters · 10 digits</span></div></div></div>
       </section>
 
   <footer class="app-footer"><span>© 2026 Signova</span><span>Built with accessibility in mind <b>✳</b></span><span class="footer-demo"><i></i> Experimental · API status shown above</span></footer>

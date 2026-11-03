@@ -5,3 +5,6 @@ data/*_features.npz
 data/preparation_report.json
 __pycache__/
 *.py[cod]
+
+# Locally supplied personal training clips (keep private)
+data/clips/**/userrecordings_*.mp4

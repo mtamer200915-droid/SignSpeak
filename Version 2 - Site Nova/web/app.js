@@ -76,7 +76,7 @@
     predictedWord: $("#predictedWord"), predictionDescription: $("#predictionDescription"),
     confidenceLabel: $("#confidenceLabel"), confidenceText: $("#confidenceText"), confidenceBar: $("#confidenceBar"), demoPrediction: $("#demoPrediction"),
     predictionSuggestions: $("#predictionSuggestions"), suggestionHeading: $("#suggestionHeading"),
-    recognitionModeHelp: $("#recognitionModeHelp"), recognitionModeButtons: $$(".recognition-mode"),
+    recognitionModeHelp: $("#recognitionModeHelp"), recognitionModeInputs: $$("input[name='recognitionMode']"),
     addWord: $("#addWord"), playSentence: $("#playSentence"), sentenceBox: $("#sentenceBox"), wordCount: $("#wordCount"),
     sentenceFeedback: $("#sentenceFeedback"), historyRows: $("#historyRows"),
     historyWordTotal: $("#historyWordTotal"), historySentenceTotal: $("#historySentenceTotal")
@@ -110,11 +110,14 @@
     const captureBusy = state.isAnalyzing || Boolean(state.currentPrediction) || Boolean(mediaRecorder && mediaRecorder.state === "recording");
     elements.startSign.disabled = isCharacters || !state.stream || captureBusy || typeof MediaRecorder === "undefined";
     elements.takePicture.disabled = !isCharacters || !state.stream || captureBusy;
-    elements.recognitionModeButtons.forEach(button => {
-      const selected = button.dataset.recognitionMode === state.recognitionMode;
-      button.classList.toggle("active", selected);
-      button.setAttribute("aria-pressed", String(selected));
-      button.disabled = captureBusy;
+    const recognitionModeBusy = state.isAnalyzing || Boolean(mediaRecorder && mediaRecorder.state === "recording");
+    elements.recognitionModeInputs.forEach(input => {
+      const selected = input.value === state.recognitionMode;
+      const option = input.closest(".recognition-mode");
+      input.checked = selected;
+      input.disabled = recognitionModeBusy;
+      option?.classList.toggle("active", selected);
+      option?.classList.toggle("disabled", recognitionModeBusy);
     });
     const inputDescription = state.recognitionMode === "words"
       ? "Words use a short video. Letters and numbers use one clear photo."
@@ -124,12 +127,12 @@
     setEnglishText(elements.recognitionModeHelp, inputDescription);
     if (elements.demoPrediction?.firstChild?.nodeType === Node.TEXT_NODE) {
       elements.demoPrediction.firstChild.nodeValue = state.recognitionMode === "words"
-        ? "Upload word video "
-        : state.recognitionMode === "numbers" ? "Upload number photo " : "Upload letter photo ";
+        ? "Upload video "
+        : "Upload photo ";
     }
     elements.demoPrediction?.setAttribute("aria-label", state.recognitionMode === "words"
-      ? "Upload a word sign video"
-      : state.recognitionMode === "numbers" ? "Upload a number photo" : "Upload a letter photo");
+      ? "Upload a sign video"
+      : "Upload a letter or number photo");
     if (isCharacters && state.stream) {
       stopPoseGuideLoop();
       state.manualPoseFallback = true;
@@ -150,10 +153,14 @@
     }
   }
   setRecognitionMode("words");
-  elements.recognitionModeButtons.forEach(button => button.addEventListener("click", () => {
-    if (state.isAnalyzing || state.currentPrediction || (mediaRecorder && mediaRecorder.state === "recording")) return;
-    if (state.capturePreviewUrl) restartCapture();
-    setRecognitionMode(button.dataset.recognitionMode);
+  elements.recognitionModeInputs.forEach(input => input.addEventListener("change", () => {
+    if (!input.checked) return;
+    if (state.isAnalyzing || (mediaRecorder && mediaRecorder.state === "recording")) {
+      setRecognitionMode(state.recognitionMode);
+      return;
+    }
+    if (state.capturePreviewUrl || state.currentPrediction) restartCapture();
+    setRecognitionMode(input.value);
   }));
 
   function clearCapturePreview() {
@@ -214,7 +221,7 @@
       setText(versionLabel, `Signova V${release.version}`);
       setText(buildLabel, String(release.build || currentBuild || "local").slice(0, 7));
     } catch {
-      setText(versionLabel, "Signova V2.3.1");
+      setText(versionLabel, "Signova V2.3.4");
       setText(buildLabel, String(currentBuild || "local").slice(0, 7));
     }
   }
@@ -276,7 +283,7 @@
     if (apiBuildMismatch) {
       elements.apiExpiryNotice.hidden = false;
       elements.apiExpiryNotice.classList.remove("expired");
-      setText(elements.apiExpiryMessage, "This website and prediction API are from different builds. Open the connected website link from the newest Signova V2 API run summary.");
+      setText(elements.apiExpiryMessage, "This website and prediction API are from different builds. Open the current connected Signova link provided by the presenter.");
       return;
     }
     if (demoExpiresAt === null && !lastHealthError) {
@@ -287,8 +294,8 @@
       elements.apiExpiryNotice.hidden = false;
       elements.apiExpiryNotice.classList.remove("expired");
       setText(elements.apiExpiryMessage, apiBuildMismatch
-        ? "This website link belongs to an older build. Open the connected website link from the newest Signova V2 API run."
-        : "This page has no API address. Start the Signova V2 API workflow, choose a duration, then open its connected website link from the run summary.");
+        ? "This website link belongs to an older build. Open the current connected Signova link provided by the presenter."
+        : "This page has no API address. Open the current connected Signova website link provided by the presenter.");
       return;
     }
     const secondsLeft = demoExpiresAt === null ? null : Math.ceil((demoExpiresAt - Date.now()) / 1000);
@@ -336,7 +343,7 @@
       apiAddressMissing = true;
       lastHealthError = true;
       updateApiExpiryNotice();
-      setApiStatus(apiBuildMismatch ? "Old website or API build · open the newest connected link" : "API address missing · open the Signova V2 demo run summary");
+      setApiStatus(apiBuildMismatch ? "Old website or API build · open the newest connected link" : "API address missing · ask for the current connected website link");
       elements.apiStatus.classList.remove("ready", "warning");
       elements.apiStatus.classList.add("error");
       return;
@@ -393,7 +400,7 @@
           ? "API build mismatch · open the newest connected website link"
           : requestedApi
           ? "API unavailable · automatic retry is ready"
-          : "API not configured · open the Signova V2 demo run summary");
+          : "API not configured · ask for the current connected website link");
         elements.apiStatus.classList.remove("ready", "warning");
         elements.apiStatus.classList.add("error");
       }
@@ -1016,16 +1023,16 @@
       elements.addWord.disabled = true;
       elements.flipCamera.disabled = !state.stream;
       setEnglishText(elements.sentenceFeedback, apiBuildMismatch
-        ? "This website and API build do not match. Open the connected website link from the newest Signova V2 API run summary."
-        : "This page has no connected API address. Start the Signova V2 API workflow, choose a duration, and open the connected website link from its run summary.");
+        ? "This website and API build do not match. Open the current connected Signova link provided by the presenter."
+        : "This page has no connected API address. Open the current connected Signova website link provided by the presenter.");
       elements.startSign.disabled = !state.stream || (!state.isFramingReady && !state.manualPoseFallback);
       if (state.stream) {
         setEnglishText(elements.cameraStatus, "Prediction API offline");
-        setEnglishText(elements.cameraHelp, "The recording is ready, but this page has no API address. Start the Signova V2 API workflow, choose a duration, and open the connected website link from its run summary.");
+        setEnglishText(elements.cameraHelp, "The recording is ready, but this page has no API address. Open the current connected Signova website link provided by the presenter.");
         elements.framingGuide.dataset.state = "manual";
         elements.cameraStage.dataset.framing = "manual";
         setEnglishText(elements.framingTitle, "Prediction API offline");
-        setEnglishText(elements.framingMessage, "Your recording could not be sent. Start the Signova V2 API workflow, choose a duration, and open the connected website link from its run summary.");
+        setEnglishText(elements.framingMessage, "Your recording could not be sent. Open the current connected Signova website link provided by the presenter.");
       }
       toast("No connected prediction API address.");
       elements.takePicture.disabled = !state.stream;
@@ -1076,7 +1083,7 @@
           suggestions = suggestions.filter(item => allowedClass.test(item.word));
           if (!allowedClass.test(String(result.word))) {
             if (!suggestions.length) {
-              const error = new Error(`The API returned no ${selectedMode} candidates. Check that the latest API workflow is running.`);
+              const error = new Error(`The API returned no ${selectedMode} candidates. Confirm that this model is available on the connected API.`);
               error.status = response.status;
               throw error;
             }
@@ -1116,6 +1123,8 @@
       console.error("Backend connection error:", error);
       const canRetryAutomatically = error.status == null || isTransientStatus(error.status);
       const backendDetail = String(error?.message || "");
+      const characterModelMissing = isCharacters && error.status === 503
+        && /letters and numbers model is not trained or installed|selected character classes are missing/i.test(backendDetail);
       const signerMissing = (error.status === 422 && !isCharacters)
         || /no signer was clearly visible|no person pose was detected/i.test(backendDetail);
       if (canRetryAutomatically) {
@@ -1127,7 +1136,10 @@
       }
       let failureMessage = error.message;
       let toastMessage = failureMessage;
-      if (signerMissing) {
+      if (characterModelMissing) {
+        failureMessage = "The connected API does not have the letters-and-numbers model loaded. Start the latest Signova V2 API and open the connected website link from its run summary.";
+        toastMessage = "Character model unavailable on this API. Open the latest connected V2 website link.";
+      } else if (signerMissing) {
         failureMessage = isCharacters
           ? "The photo could not be decoded. Use a clear JPG or PNG image."
           : "No signer was clearly visible in enough frames. Face the camera and keep your shoulders and both arms in frame. For a saved clip, upload the original video instead of filming a screen.";
@@ -1154,14 +1166,18 @@
       elements.takePicture.disabled = !state.stream;
       elements.startSign.disabled = !state.stream || typeof MediaRecorder === "undefined";
       if (state.stream) {
-        setEnglishText(elements.cameraStatus, "Ready to try again");
-        setEnglishText(elements.cameraHelp, signerMissing
+        setEnglishText(elements.cameraStatus, characterModelMissing ? "Character model unavailable" : "Ready to try again");
+        setEnglishText(elements.cameraHelp, characterModelMissing
+          ? "The connected API needs its character model loaded. Open the connected website link from the latest Signova V2 API run."
+          : signerMissing
           ? "No signer was detected. Face the camera and perform the sign yourself, or upload the original video file. Filming a screen is not supported."
           : "The clip was not analyzed. Correct the camera framing if needed, then record again; temporary API failures are retried automatically.");
         elements.framingGuide.dataset.state = state.isFramingReady ? "ready" : "adjust";
         elements.cameraStage.dataset.framing = state.isFramingReady ? "ready" : "adjust";
-        setEnglishText(elements.framingTitle, "Prediction unavailable");
-        setEnglishText(elements.framingMessage, signerMissing
+        setEnglishText(elements.framingTitle, characterModelMissing ? "Character model unavailable" : "Prediction unavailable");
+        setEnglishText(elements.framingMessage, characterModelMissing
+          ? "The current API session cannot predict letters or numbers. Start the latest V2 API workflow and use its connected website link."
+          : signerMissing
           ? "Show the signer in the camera, or upload the original video file."
           : canRetryAutomatically
           ? "Try recording the sign again; Signova retries automatically when the API is waking or restarting."
