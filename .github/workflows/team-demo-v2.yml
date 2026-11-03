@@ -264,9 +264,8 @@ jobs:
           fi
           website_version=$(python -c 'import json,sys; print(json.loads(sys.argv[1])["version"])' "$site_version")
 
-          gh variable set SIGNOVA_V2_API_BASE --body "$api_url" --repo "$GITHUB_REPOSITORY"
-          gh variable set SIGNOVA_V2_API_BUILD --body "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
-          gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main
+          gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f "api_base=$api_url" -f "api_build=$GITHUB_SHA"
           config_ready=0
           for attempt in $(seq 1 60); do
             api_config=$(curl --silent --fail "https://mtamer200915-droid.github.io/SignSpeak/v2/api-config.js?check=${GITHUB_RUN_ID}" || true)

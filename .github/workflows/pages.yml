@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      api_base:
+        description: Temporary Signova V2 API origin
+        required: false
+        type: string
+      api_build:
+        description: Commit used by the temporary Signova V2 API
+        required: false
+        type: string
 
 permissions:
   actions: read
@@ -19,8 +28,8 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     env:
-      SIGNOVA_V2_API_BASE: ${{ vars.SIGNOVA_V2_API_BASE }}
-      SIGNOVA_V2_API_BUILD: ${{ vars.SIGNOVA_V2_API_BUILD }}
+      SIGNOVA_V2_API_BASE: ${{ inputs.api_base || vars.SIGNOVA_V2_API_BASE }}
+      SIGNOVA_V2_API_BUILD: ${{ inputs.api_build || vars.SIGNOVA_V2_API_BUILD }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
