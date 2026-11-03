@@ -67,8 +67,7 @@
   const elements = {
     sidebar: $("#sidebar"), pageCrumb: $("#pageCrumb"), toast: $("#toast"),
     recognizedTypeLabel: $("#recognizedTypeLabel"),
-    sidebarApiStatus: $("#sidebarApiStatus"),
-    apiStatus: $("#apiStatus"), apiExpiryNotice: $("#apiExpiryNotice"), apiExpiryMessage: $("#apiExpiryMessage"),
+    apiStatus: $("#sidebarApiStatus"), apiExpiryNotice: $("#apiExpiryNotice"), apiExpiryMessage: $("#apiExpiryMessage"),
     cameraVideo: $("#cameraVideo"), cameraStage: $("#cameraStage"), cameraStatus: $("#cameraStatus"),
     startCamera: $("#startCamera"), startSign: $("#startSign"), stopCamera: $("#stopCamera"), takePicture: $("#takePicture"),
     restartCapture: $("#restartCapture"), captureImage: $("#captureImage"), captureVideo: $("#captureVideo"),
@@ -222,7 +221,7 @@
       setText(versionLabel, `Signova V${release.version}`);
       setText(buildLabel, String(release.build || currentBuild || "local").slice(0, 7));
     } catch {
-      setText(versionLabel, "Signova V2.3.6");
+      setText(versionLabel, "Signova V2.3.7");
       setText(buildLabel, String(currentBuild || "local").slice(0, 7));
     }
   }
@@ -243,7 +242,6 @@
 
   function setApiStatus(source, values = {}) {
     setEnglishText(elements.apiStatus, source, values);
-    setEnglishText(elements.sidebarApiStatus, source, values);
   }
 
   function isTransientStatus(status) {
@@ -284,7 +282,7 @@
     if (apiBuildMismatch) {
       elements.apiExpiryNotice.hidden = false;
       elements.apiExpiryNotice.classList.remove("expired");
-      setText(elements.apiExpiryMessage, "This website and API are from different builds. Open the stable Signova V2 website address.");
+      setText(elements.apiExpiryMessage, "The recognition service is updating. Please reload the page and try again.");
       return;
     }
     if (demoExpiresAt === null && !lastHealthError) {
@@ -296,7 +294,7 @@
       elements.apiExpiryNotice.classList.remove("expired");
       setText(elements.apiExpiryMessage, apiBuildMismatch
         ? "This website link is outdated. Open the stable Signova V2 website address."
-        : "The stable website is waiting for the presenter to start and publish a V2 API session. Reload this page after it is ready.");
+        : "The recognition service is unavailable. Please try again later.");
       return;
     }
     const secondsLeft = demoExpiresAt === null ? null : Math.ceil((demoExpiresAt - Date.now()) / 1000);
@@ -308,13 +306,13 @@
     elements.apiExpiryNotice.hidden = false;
     if (lastHealthError && (secondsLeft === null || secondsLeft > 0)) {
       elements.apiExpiryNotice.classList.remove("expired");
-      setText(elements.apiExpiryMessage, "The shared API is unavailable or waking up. Signova retries automatically during a prediction request.");
+      setText(elements.apiExpiryMessage, "The recognition service is unavailable or starting. Signova retries automatically during a prediction request.");
     } else if (secondsLeft > 0) {
       elements.apiExpiryNotice.classList.remove("expired");
-      setText(elements.apiExpiryMessage, "Warning: the shared temporary API session ends in {time}. Finish any recording in progress.", { time: formatClock(secondsLeft) });
+      setText(elements.apiExpiryMessage, "The recognition session ends in {time}. Finish any recording in progress.", { time: formatClock(secondsLeft) });
     } else {
       elements.apiExpiryNotice.classList.add("expired");
-      setText(elements.apiExpiryMessage, "The temporary API session has ended. Its Quick Tunnel address cannot be restarted or discovered by this page; the stable auto-waking API link is needed for automatic recovery.");
+      setText(elements.apiExpiryMessage, "The recognition session has ended. Please try again later.");
     }
   }
 
@@ -344,7 +342,7 @@
       apiAddressMissing = true;
       lastHealthError = true;
       updateApiExpiryNotice();
-      setApiStatus(apiBuildMismatch ? "Old website or API build · open the stable V2 website" : "Waiting for the presenter to start the V2 API session");
+      setApiStatus("Recognition service unavailable");
       elements.apiStatus.classList.remove("ready", "warning");
       elements.apiStatus.classList.add("error");
       return;
@@ -354,7 +352,7 @@
     healthCheckPromise = (async () => {
       try {
         const response = await fetchWithReconnect(`${API_BASE}/health`, {}, () => {
-          setApiStatus("Waking API · reconnecting automatically…");
+          setApiStatus("Connecting to recognition service…");
           elements.apiStatus.classList.remove("ready", "error");
           elements.apiStatus.classList.add("warning");
         });
@@ -392,17 +390,17 @@
           elements.apiStatus.classList.add("warning");
           return;
         }
-        setApiStatus(characterMode?.model_loaded ? "API running · word and character models" : "API running · local 20-word V2 model");
+        setApiStatus(characterMode?.model_loaded ? "Recognition service connected" : "Word recognition connected");
         elements.apiStatus.classList.remove("error", "warning");
         elements.apiStatus.classList.add("ready");
       } catch (error) {
         lastHealthError = true;
         updateApiExpiryNotice();
         setApiStatus(apiBuildMismatch
-          ? "API build mismatch · open the stable V2 website"
+          ? "Recognition service updating · reload the page"
           : requestedApi
-          ? "API unavailable · automatic retry is ready"
-          : "API not configured · the presenter must start a V2 session, then reload this page");
+          ? "Recognition service unavailable · retry available"
+          : "Recognition service unavailable");
         elements.apiStatus.classList.remove("ready", "warning");
         elements.apiStatus.classList.add("error");
       }
@@ -1025,18 +1023,18 @@
       elements.addWord.disabled = true;
       elements.flipCamera.disabled = !state.stream;
       setEnglishText(elements.sentenceFeedback, apiBuildMismatch
-        ? "This website and API build do not match. Reload the stable Signova V2 website after the presenter starts a new session."
-        : "The stable website is waiting for the presenter to start and publish a V2 API session. Reload this page after it is ready.");
+        ? "The recognition service is updating. Reload this page and try again."
+        : "The recognition service is unavailable. Please try again later.");
       elements.startSign.disabled = !state.stream || (!state.isFramingReady && !state.manualPoseFallback);
       if (state.stream) {
-        setEnglishText(elements.cameraStatus, "Prediction API offline");
-        setEnglishText(elements.cameraHelp, "The recording is ready, but the API is not connected. Ask the presenter to start the V2 API session, then reload the stable website.");
+        setEnglishText(elements.cameraStatus, "Recognition service unavailable");
+        setEnglishText(elements.cameraHelp, "The recording is ready, but the recognition service is unavailable. Please try again later.");
         elements.framingGuide.dataset.state = "manual";
         elements.cameraStage.dataset.framing = "manual";
-        setEnglishText(elements.framingTitle, "Prediction API offline");
-        setEnglishText(elements.framingMessage, "Your recording could not be sent. Ask the presenter to start the V2 API session, then reload the stable website.");
+        setEnglishText(elements.framingTitle, "Recognition service unavailable");
+        setEnglishText(elements.framingMessage, "Your recording could not be sent. Please try again later.");
       }
-      toast("Waiting for the presenter to start the V2 API session.");
+      toast("Recognition service unavailable. Please try again later.");
       elements.takePicture.disabled = !state.stream;
       return;
     }
@@ -1059,10 +1057,10 @@
         method: "POST",
         body: formData
       }, attempt => {
-        setApiStatus("API waking or recovering · retry {attempt}/4", { attempt });
+        setApiStatus("Reconnecting · retry {attempt}/4", { attempt });
         elements.apiStatus.classList.remove("ready", "error");
         elements.apiStatus.classList.add("warning");
-        setEnglishText(elements.sentenceFeedback, "The API is waking up or restarting. Retrying this prediction automatically…");
+        setEnglishText(elements.sentenceFeedback, "The recognition service is reconnecting. Retrying this prediction automatically…");
       });
 
       if (requestId !== state.captureRequestId) return;
@@ -1098,7 +1096,7 @@
         }
         lastHealthError = false;
         updateApiExpiryNotice();
-        setApiStatus("API running · prediction received");
+        setApiStatus("Connected · prediction received");
         elements.apiStatus.classList.remove("error", "warning");
         elements.apiStatus.classList.add("ready");
         showRealPrediction({
@@ -1132,15 +1130,15 @@
       if (canRetryAutomatically) {
         lastHealthError = true;
         updateApiExpiryNotice();
-        setApiStatus("API unavailable · automatic recovery will retry on the next request");
+        setApiStatus("Recognition service unavailable · try again later");
         elements.apiStatus.classList.remove("ready", "warning");
         elements.apiStatus.classList.add("error");
       }
       let failureMessage = error.message;
       let toastMessage = failureMessage;
       if (characterModelMissing) {
-        failureMessage = "The connected API does not have the letters-and-numbers model loaded. Start the latest V2 API session, then reload the stable Signova V2 website.";
-        toastMessage = "Character model unavailable on this API. Open the latest connected V2 website link.";
+        failureMessage = "Letter and number recognition is currently unavailable. Please try again later.";
+        toastMessage = failureMessage;
       } else if (signerMissing) {
         failureMessage = isCharacters
           ? "The photo could not be decoded. Use a clear JPG or PNG image."
@@ -1150,8 +1148,8 @@
         failureMessage = "The API request timed out. Try a shorter recording.";
         toastMessage = failureMessage;
       } else if (error.status == null) {
-        failureMessage = "The prediction service could not be reached. Check the API session and your internet connection.";
-        toastMessage = "The prediction API could not be reached. Check the API link and your internet connection.";
+        failureMessage = "The recognition service could not be reached. Check your internet connection and try again later.";
+        toastMessage = failureMessage;
       } else if (error.status >= 500) {
         failureMessage = backendDetail || (isCharacters
           ? "The API could not process this photo. Try a clear picture of one centered handshape."
@@ -1170,7 +1168,7 @@
       if (state.stream) {
         setEnglishText(elements.cameraStatus, characterModelMissing ? "Character model unavailable" : "Ready to try again");
         setEnglishText(elements.cameraHelp, characterModelMissing
-          ? "The connected API needs its character model loaded. Start the latest V2 API session, then reload the stable website."
+          ? "Letter and number recognition is currently unavailable. Please try again later."
           : signerMissing
           ? "No signer was detected. Face the camera and perform the sign yourself, or upload the original video file. Filming a screen is not supported."
           : "The clip was not analyzed. Correct the camera framing if needed, then record again; temporary API failures are retried automatically.");
@@ -1178,7 +1176,7 @@
         elements.cameraStage.dataset.framing = state.isFramingReady ? "ready" : "adjust";
         setEnglishText(elements.framingTitle, characterModelMissing ? "Character model unavailable" : "Prediction unavailable");
         setEnglishText(elements.framingMessage, characterModelMissing
-          ? "The current API session cannot predict letters or numbers. Start the latest V2 API workflow, then reload the stable Signova V2 website."
+          ? "Letter and number recognition is currently unavailable. Please try again later."
           : signerMissing
           ? "Show the signer in the camera, or upload the original video file."
           : canRetryAutomatically
@@ -1225,9 +1223,12 @@
         elements.predictedWord.textContent = candidate.word;
         elements.confidenceText.textContent = `${state.currentPrediction.confidence}%`;
         elements.confidenceBar.style.width = `${Math.max(0, Math.min(100, state.currentPrediction.confidence))}%`;
-        setEnglishText(elements.predictionDescription, predictionMode === "characters"
+        const selectedDescription = predictionMode === "characters"
           ? "You selected this character from the model's three suggestions. Check it before adding."
-          : "You selected this word from the model's three suggestions. Check it before adding.");
+          : "You selected this word from the model's three suggestions. Check it before adding.";
+        setEnglishText(elements.predictionDescription, state.currentPrediction.confidence < 10
+          ? `${selectedDescription} Low model score. Try a clearer sign; do not rely on this prediction.`
+          : selectedDescription);
         list.querySelectorAll(".suggestion-option").forEach(option => {
           option.setAttribute("aria-pressed", String(option === button));
         });
@@ -1247,9 +1248,12 @@
     const sourceNote = isCharacters
       ? `Experimental Signova ${characterKind} model output. Results are restricted to ${characterKind}.`
       : "Experimental Signova V2 model output (20 signs).";
-    const descriptionSource = prediction.poseCoverage === null
+    let descriptionSource = prediction.poseCoverage === null
       ? "{source} Review the suggestions if the word looks wrong."
       : "{source} Person visible in {coverage}% of sampled frames. Review the suggestions if the word looks wrong.";
+    if ((Number(prediction.confidence) || 0) < 10) {
+      descriptionSource += " Low model score. Try a clearer sign; do not rely on this prediction.";
+    }
     setEnglishText(elements.predictionDescription, descriptionSource, { source: sourceNote, coverage: prediction.poseCoverage });
     setEnglishText(elements.confidenceLabel, "Local model score");
     setEnglishText(elements.sentenceFeedback, "Prediction received: {word}. Review it, then press Done to add it.", { word: prediction.word });

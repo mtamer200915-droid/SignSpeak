@@ -25,7 +25,7 @@
         <button class="nav-link" data-page="about"><span class="nav-icon">ⓘ</span>About Signova</button>
       </nav>
       <div class="sidebar-bottom">
-        <div class="status-card"><span class="status-dot"></span><div><strong>Signova translator</strong><small id="sidebarApiStatus">Checking API connection…</small></div></div>
+        <div class="status-card"><span class="status-dot"></span><div><strong>Signova translator</strong><small id="sidebarApiStatus" role="status" aria-live="polite">Checking connection…</small></div></div>
         <div class="sidebar-foot">BUILT FOR ACCESSIBILITY <span>✳</span></div>
       </div>
     </aside>
@@ -34,7 +34,7 @@
       <header class="topbar">
         <button class="mobile-menu" id="mobileMenu" aria-label="Toggle navigation">☰</button>
         <div class="breadcrumbs"><span>Signova</span><b>/</b><strong id="pageCrumb">Home</strong></div>
-        <div class="top-actions"><span class="connection"><i></i> Signova API</span><div class="avatar">SO</div></div>
+        <div class="top-actions"><span class="connection"><i></i> Signova</span><div class="avatar">SO</div></div>
       </header>
 
       <section class="page active" id="page-home">
@@ -65,11 +65,11 @@
           <button class="feature-card" data-go="history"><span class="feature-icon purple">◷</span><span class="feature-arrow">↗</span><h3>Review history</h3><p>See words you've added to this session and clear them any time.</p><span class="feature-link">View history <b>→</b></span></button>
           <button class="feature-card" data-go="about"><span class="feature-icon cyan">✳</span><span class="feature-arrow">↗</span><h3>About the project</h3><p>See how video capture, recognition, and sentence history fit together.</p><span class="feature-link">Meet Signova <b>→</b></span></button>
         </div>
-        <div class="notice"><span>ⓘ</span><p><b>For a prediction, connect a Signova API.</b> GitHub Pages serves this interface; model predictions need a running API configured for this site.</p></div>
+        <div class="notice"><span>ⓘ</span><p><b>Predictions require an active connection.</b> Check the connection status before translating.</p></div>
       </section>
 
       <section class="page" id="page-translator">
-        <div class="page-heading"><div><div class="eyebrow">CAMERA TRANSLATION</div><h1>Sign <span>Translator</span></h1><p>Choose Words, Letters, or Numbers first. Signova then uses only the matching model classes.</p></div><span class="mode-badge"><i></i> SIGNOVA API</span></div>
+        <div class="page-heading"><div><div class="eyebrow">CAMERA TRANSLATION</div><h1>Sign <span>Translator</span></h1><p>Choose Words, Letters, or Numbers first. Signova then uses only the matching model classes.</p></div><span class="mode-badge"><i></i> SIGNOVA</span></div>
         <div class="api-expiry-notice" id="apiExpiryNotice" role="status" aria-live="polite" hidden><span aria-hidden="true">ⓘ</span><p id="apiExpiryMessage"></p></div>
         <div class="recognition-selector panel">
           <div><span class="panel-kicker">RECOGNITION TYPE</span><strong>What are you signing?</strong><p id="recognitionModeHelp">Words use a short video. Letters and numbers use one clear photo.</p></div>
@@ -95,7 +95,6 @@
             </div>
             <div class="camera-controls"><button class="btn btn-primary" id="startCamera">Start camera <span>↗</span></button><button class="btn btn-primary" id="startSign" disabled>Start sign <span>●</span></button><button class="btn btn-primary" id="takePicture" disabled>Take photo <span>◎</span></button><button class="btn btn-ghost" id="stopCamera" disabled>Stop sign &amp; predict</button><button class="btn btn-ghost" id="restartCapture" disabled hidden>Restart capture</button><button class="btn btn-ghost" id="flipCamera" disabled title="Switch between the front and rear cameras">Flip camera <span>↻</span></button><button class="btn btn-ghost" id="cameraOff" disabled>Stop camera</button><button class="icon-btn" id="flipHint" title="Camera tips" aria-label="Camera tips">?</button></div>
             <p class="helper-text" id="cameraHelp">Start the camera first. The local framing guide checks that your face and shoulders are visible before you record. Perform the sign yourself in front of the camera; showing a video on another screen may not be recognized.</p>
-            <p class="api-help">The presenter starts a temporary API session. This same Signova V2 website address reconnects automatically after each new session is published.</p>
           </div>
           <div class="right-stack">
             <div class="panel prediction-panel">
@@ -123,7 +122,7 @@
           <article class="panel vocabulary-card"><span class="panel-kicker">CHARACTER MODEL</span><h2>Letters</h2><p>ASL fingerspelling · A–Z</p><div class="vocabulary-chips alphabet-chips" id="supportedLetterList"></div><small class="vocabulary-note">J and Z include movement; this image dataset shows still handshapes and does not model the full movement.</small></article>
           <article class="panel vocabulary-card"><span class="panel-kicker">CHARACTER MODEL</span><h2>Numbers</h2><p>ASL number handshapes · 0–9</p><div class="vocabulary-chips number-chips" id="supportedNumberList"></div><small class="vocabulary-note" id="characterModelAccuracy">Letters and numbers model is not trained or connected yet.</small></article>
         </div>
-        <div class="notice"><span>ⓘ</span><p>Words and characters use separate models under the same Signova API. Image test accuracy is reported separately and does not guarantee camera accuracy.</p></div>
+        <div class="notice"><span>ⓘ</span><p>Words and characters use separate recognition models. Image test accuracy is reported separately and does not guarantee camera accuracy.</p></div>
         <a class="btn btn-outline" href="learning/word-sign-videos/">Open word sign guides <span>↗</span></a>
       </section>
 
@@ -136,15 +135,14 @@
 
       <section class="page" id="page-about">
         <div class="page-heading"><div><div class="eyebrow">THE IDEA BEHIND THE INTERFACE</div><h1>About <span>Signova</span></h1><p>Technology should bring people closer. Signova is a student project exploring sign-language recognition.</p></div><div class="about-logo">S<span>O</span></div></div>
-        <div class="about-hero panel"><div class="about-hero-copy"><span class="panel-kicker">OUR MISSION</span><h2>Making communication<br />feel more <span>connected.</span></h2><p>Signova V2 has a 20-word video model and a separate image model for ASL letters and digits. Choose Words, Letters, or Numbers before capture; the API returns up to three candidates from that selected group for review.</p></div><div class="about-graphic"><div class="graphic-ring"></div><div class="graphic-core">✳</div><span class="graphic-word word-one">GESTURE</span><span class="graphic-word word-two">MEANING</span><span class="graphic-word word-three">CONNECTION</span></div></div>
+        <div class="about-hero panel"><div class="about-hero-copy"><span class="panel-kicker">OUR MISSION</span><h2>Making communication<br />feel more <span>connected.</span></h2><p>Signova V2 has a 20-word video model and a separate image model for ASL letters and digits. Choose Words, Letters, or Numbers before capture, then review up to three suggestions.</p></div><div class="about-graphic"><div class="graphic-ring"></div><div class="graphic-core">✳</div><span class="graphic-word word-one">GESTURE</span><span class="graphic-word word-two">MEANING</span><span class="graphic-word word-three">CONNECTION</span></div></div>
         <div class="section-heading"><div><div class="eyebrow">HOW IT WORKS</div><h2>Three parts. One experience.</h2></div></div>
-        <div class="steps-grid"><div class="step-card"><span>01</span><h3>Capture</h3><p>The browser asks for camera permission and shows the live preview. Use video for words or a hand-centered photo for letters and numbers.</p><small>FRONTEND</small></div><div class="step-card"><span>02</span><h3>Recognize</h3><p>The shared V2 API selects the word or character model and ranks up to three candidates within the chosen type.</p><small>BACKEND + MODEL</small></div><div class="step-card"><span>03</span><h3>Communicate</h3><p>Review and choose a candidate, add it to your text, and use the session history or audio output.</p><small>FRONTEND</small></div></div>
+        <div class="steps-grid"><div class="step-card"><span>01</span><h3>Capture</h3><p>The browser asks for camera permission and shows the live preview. Use video for words or a hand-centered photo for letters and numbers.</p><small>CAMERA</small></div><div class="step-card"><span>02</span><h3>Recognize</h3><p>Signova ranks up to three candidates within the chosen type.</p><small>RECOGNITION</small></div><div class="step-card"><span>03</span><h3>Communicate</h3><p>Review and choose a candidate, add it to your text, and use the session history or audio output.</p><small>OUTPUT</small></div></div>
         <div class="notice"><span>◉</span><p><b>Held-out model evaluation.</b> <span id="modelTestSummary">Loading test results…</span> <a href="model-report.json">View the evaluation report</a>.</p></div>
-        <div class="release-card panel"><div><span class="panel-kicker">CURRENT WEBSITE RELEASE</span><strong id="siteVersion">Signova V2.3.6</strong><small>Build <code id="siteBuild">Loading…</code></small></div></div>
-        <div class="panel integration-panel"><div class="integration-icon">⌘</div><div><span class="panel-kicker">INTEGRATION STATUS</span><h2>Signova V2 API connection</h2><p>The website reports the API connection status here. The presenter starts a temporary API session; the same Signova V2 website address reconnects when its API setting is refreshed. The camera framing guide runs in your browser; clips are sent to the API only after you stop recording.</p><div class="integration-tags"><span id="apiStatus" class="api-health" role="status" aria-live="polite">Checking model connection…</span><span>HTML</span><span>CSS</span><span>JavaScript</span><span>HTTPS API</span><span>20 word classes</span><span>26 letters · 10 digits</span></div></div></div>
+        <div class="release-card panel"><div><span class="panel-kicker">CURRENT WEBSITE RELEASE</span><strong id="siteVersion">Signova V2.3.7</strong><small>Build <code id="siteBuild">Loading…</code></small></div></div>
       </section>
 
-  <footer class="app-footer"><span>© 2026 Signova</span><span>Built with accessibility in mind <b>✳</b></span><span class="footer-demo"><i></i> Experimental · API status shown above</span></footer>
+  <footer class="app-footer"><span>© 2026 Signova</span><span>Built with accessibility in mind <b>✳</b></span><span class="footer-demo"><i></i> Experimental recognition</span></footer>
     </main>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
