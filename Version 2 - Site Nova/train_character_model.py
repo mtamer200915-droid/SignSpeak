@@ -59,30 +59,37 @@ def entries_for_archive(archive: zipfile.ZipFile, kind: str):
 
 def stage_archives(alpha_zip: Path, digits_zip: Path, rebuild: bool, max_images_per_class: int) -> dict:
     global CACHE_DIR
-    marker = CACHE_DIR / "source_manifest.json"
     sources = {"alphabet_zip": str(alpha_zip.resolve()), "digits_zip": str(digits_zip.resolve())}
-    if marker.is_file() and not rebuild:
-        try:
-            cached = json.loads(marker.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            cached = {}
-        if (cached.get("sources") == sources
-                and cached.get("max_images_per_class") == max_images_per_class):
+    base_cache_dir = CACHE_DIR
+    candidates = [base_cache_dir, *sorted(base_cache_dir.parent.glob(f"{base_cache_dir.name}-*"), reverse=True)]
+    if not rebuild:
+        for candidate in candidates:
+            marker = candidate / "source_manifest.json"
+            if not marker.is_file():
+                continue
+            try:
+                cached = json.loads(marker.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if (cached.get("sources") != sources
+                    or cached.get("max_images_per_class") != max_images_per_class):
+                continue
             cached_counts = cached.get("counts", {})
             cache_complete = all(
-                sum(1 for path in (CACHE_DIR / split / label).glob("*") if path.suffix.lower() in {".jpg", ".jpeg"})
+                sum(1 for path in (candidate / split / label).glob("*") if path.suffix.lower() in {".jpg", ".jpeg"})
                 == cached_counts.get(split, {}).get(label)
                 for split in ("train", "val", "test")
                 for label in CLASSES
             )
             if cache_complete:
+                CACHE_DIR = candidate
                 print(f"Using already prepared images in {CACHE_DIR}", flush=True)
                 return cached_counts
-            print("Prepared image cache is incomplete; rebuilding it from the source archives.", flush=True)
-    if CACHE_DIR.exists():
+            print(f"Prepared image cache at {candidate} is incomplete; rebuilding from the source archives.", flush=True)
+    if CACHE_DIR.exists() or any(base_cache_dir.parent.glob(f"{base_cache_dir.name}-*")):
         stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
-        CACHE_DIR = CACHE_DIR.with_name(f"character-training-{stamp}")
-        marker = CACHE_DIR / "source_manifest.json"
+        CACHE_DIR = base_cache_dir.with_name(f"{base_cache_dir.name}-{stamp}")
+    marker = CACHE_DIR / "source_manifest.json"
     for path in (alpha_zip, digits_zip):
         if not path.is_file():
             raise FileNotFoundError(f"Dataset archive not found: {path}")
@@ -149,6 +156,7 @@ def stage_archives(alpha_zip: Path, digits_zip: Path, rebuild: bool, max_images_
 
 def train(epochs: int, batch_size: int, weights: str, alpha_zip: Path, digits_zip: Path, rebuild: bool, max_images_per_class: int) -> dict:
     import numpy as np
+    from PIL import Image
     import tensorflow as tf
 
     tf.keras.utils.set_random_seed(SEED)
@@ -158,22 +166,6 @@ def train(epochs: int, batch_size: int, weights: str, alpha_zip: Path, digits_zi
         if too_small:
             raise RuntimeError(f"Not enough {split} samples for: {', '.join(too_small)}")
 
-    def load_split(split: str, shuffle: bool):
-        dataset = tf.keras.utils.image_dataset_from_directory(
-            CACHE_DIR / split,
-            class_names=list(CLASSES),
-            labels="inferred",
-            label_mode="int",
-            image_size=(IMAGE_SIZE, IMAGE_SIZE),
-            batch_size=batch_size,
-            shuffle=shuffle,
-            seed=SEED,
-        )
-        return dataset.prefetch(tf.data.AUTOTUNE)
-
-    train_ds = load_split("train", True)
-    val_ds = load_split("val", False)
-    test_ds = load_split("test", False)
     augmentation = tf.keras.Sequential([
         tf.keras.layers.RandomRotation(0.035, fill_mode="nearest"),
         tf.keras.layers.RandomTranslation(0.06, 0.06, fill_mode="nearest"),
@@ -181,9 +173,6 @@ def train(epochs: int, batch_size: int, weights: str, alpha_zip: Path, digits_zi
         tf.keras.layers.RandomContrast(0.10),
     ], name="safe_handshape_augmentation")
 
-    inputs = tf.keras.Input((IMAGE_SIZE, IMAGE_SIZE, 3), name="rgb_frame_0_255")
-    x = augmentation(inputs)
-    x = tf.keras.applications.mobilenet_v2.preprocess_input(x)
     try:
         backbone = tf.keras.applications.MobileNetV2(
             include_top=False, weights=None if weights.lower() == "none" else weights,
@@ -192,22 +181,63 @@ def train(epochs: int, batch_size: int, weights: str, alpha_zip: Path, digits_zi
     except Exception as exc:
         raise RuntimeError("Could not load pretrained MobileNetV2 weights. Retry with Kaggle Notebook internet enabled or pass --weights none.") from exc
     backbone.trainable = False
-    x = backbone(x, training=False)
-    x = tf.keras.layers.Dropout(0.35)(x)
+
+    @tf.function(input_signature=[tf.TensorSpec((None, IMAGE_SIZE, IMAGE_SIZE, 3), tf.float32)])
+    def embed_batch(images):
+        return backbone(tf.keras.applications.mobilenet_v2.preprocess_input(images), training=False)
+
+    def encode_split(split: str, augment_images: bool):
+        """Read small, bounded batches and cache frozen MobileNetV2 features once."""
+        rows: list[tuple[Path, int]] = []
+        for label_index, label in enumerate(CLASSES):
+            rows.extend((path, label_index) for path in sorted((CACHE_DIR / split / label).glob("*"))
+                        if path.suffix.lower() in {".jpg", ".jpeg"})
+        if split == "train":
+            np.random.default_rng(SEED).shuffle(rows)
+        feature_batches = []
+        label_batches = []
+        total = len(rows)
+        batch_count = int(np.ceil(total / batch_size))
+        for batch_index, start in enumerate(range(0, total, batch_size)):
+            batch_rows = rows[start:start + batch_size]
+            images = []
+            for path, _ in batch_rows:
+                with Image.open(path) as source:
+                    images.append(np.asarray(source.convert("RGB").resize(
+                        (IMAGE_SIZE, IMAGE_SIZE), Image.Resampling.BILINEAR), dtype=np.float32))
+            images = np.stack(images, axis=0)
+            if augment_images:
+                images = augmentation(images, training=True).numpy()
+            embeddings = embed_batch(tf.convert_to_tensor(images, dtype=tf.float32))
+            feature_batches.append(embeddings.numpy().astype(np.float32))
+            label_batches.append(np.asarray([label for _, label in batch_rows], dtype=np.int32))
+            if (batch_index + 1) % 10 == 0 or batch_index + 1 == batch_count:
+                print(f"Encoded {split}: {min((batch_index + 1) * batch_size, total)}/{total}", flush=True)
+        return np.concatenate(feature_batches, axis=0), np.concatenate(label_batches, axis=0)
+
+    X_train, y_train = encode_split("train", augment_images=True)
+    X_val, y_val = encode_split("val", augment_images=False)
+    X_test, y_test = encode_split("test", augment_images=False)
+
+    feature_inputs = tf.keras.Input((1280,), name="mobilenet_v2_features")
+    x = tf.keras.layers.Dropout(0.35)(feature_inputs)
     x = tf.keras.layers.Dense(256, activation="relu", kernel_regularizer=tf.keras.regularizers.l2(0.001))(x)
     x = tf.keras.layers.Dropout(0.30)(x)
-    outputs = tf.keras.layers.Dense(len(CLASSES), activation="softmax", name="character_probabilities")(x)
-    model = tf.keras.Model(inputs, outputs, name="signova_asl_letters_digits")
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-                  loss="sparse_categorical_crossentropy", metrics=["accuracy"])
+    feature_outputs = tf.keras.layers.Dense(len(CLASSES), activation="softmax", name="character_probabilities")(x)
+    classifier = tf.keras.Model(feature_inputs, feature_outputs, name="signova_asl_character_classifier")
+    classifier.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                       loss="sparse_categorical_crossentropy", metrics=["accuracy"])
     callbacks = [
         tf.keras.callbacks.EarlyStopping(monitor="val_accuracy", patience=5, mode="max", restore_best_weights=True),
         tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=2, min_lr=1e-5),
     ]
-    history = model.fit(train_ds, validation_data=val_ds, epochs=epochs, callbacks=callbacks, verbose=2)
+    history = classifier.fit(
+        X_train, y_train, validation_data=(X_val, y_val), epochs=epochs,
+        batch_size=batch_size, shuffle=True, callbacks=callbacks, verbose=2,
+    )
 
-    probabilities = model.predict(test_ds, verbose=1)
-    y_true = np.concatenate([labels.numpy() for _, labels in test_ds])
+    probabilities = classifier.predict(X_test, batch_size=batch_size, verbose=1)
+    y_true = y_test
     y_pred = np.argmax(probabilities, axis=1)
     top3 = np.argsort(probabilities, axis=1)[:, -3:]
     per_class = {}
@@ -218,6 +248,7 @@ def train(epochs: int, batch_size: int, weights: str, alpha_zip: Path, digits_zi
             "accuracy": float(np.mean(y_pred[mask] == y_true[mask])) if np.any(mask) else None,
         }
     matrix = tf.math.confusion_matrix(y_true, y_pred, num_classes=len(CLASSES)).numpy().tolist()
+    balanced_top1 = float(np.mean([per_class[label]["accuracy"] for label in CLASSES]))
     report = {
         "model": "ImageNet MobileNetV2 transfer learning for static ASL handshapes",
         "classes": list(CLASSES),
@@ -225,6 +256,7 @@ def train(epochs: int, batch_size: int, weights: str, alpha_zip: Path, digits_zi
         "samples": counts,
         "test": {
             "top1_accuracy": float(np.mean(y_pred == y_true)),
+            "balanced_top1_accuracy": balanced_top1,
             "top3_accuracy": float(np.mean([label in guesses for label, guesses in zip(y_true, top3)])),
             "clip_count": int(len(y_true)),
             "per_class": per_class,
@@ -232,9 +264,19 @@ def train(epochs: int, batch_size: int, weights: str, alpha_zip: Path, digits_zi
             "confusion_matrix_labels": list(CLASSES),
             "split_note": "Random image holdout; the source archives do not identify signers, so this is not signer-independent camera accuracy.",
         },
-        "training": {"epochs_ran": len(history.history.get("loss", [])), "seed": SEED, "backbone_weights": weights},
+        "training": {
+            "epochs_ran": len(history.history.get("loss", [])),
+            "seed": SEED,
+            "backbone_weights": weights,
+            "method": "Frozen MobileNetV2 features are extracted once; a regularized classifier is trained on those features.",
+            "augmentation": "One randomized rotation/translation/zoom/contrast view per training image.",
+        },
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+    image_inputs = tf.keras.Input((IMAGE_SIZE, IMAGE_SIZE, 3), name="rgb_frame_0_255")
+    normalized = tf.keras.applications.mobilenet_v2.preprocess_input(image_inputs)
+    outputs = classifier(backbone(normalized, training=False))
+    model = tf.keras.Model(image_inputs, outputs, name="signova_asl_letters_digits")
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     model.save(MODEL_DIR / "signova_characters.keras")
     (MODEL_DIR / "character_model_info.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -249,8 +291,8 @@ def main() -> None:
     parser.add_argument("--digits-zip", type=Path, default=DEFAULT_DIGITS_ZIP)
     parser.add_argument("--epochs", type=int, default=18)
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--max-images-per-class", type=int, default=2000,
-                        help="Limit each class to a balanced random sample; 0 uses every image.")
+    parser.add_argument("--max-images-per-class", type=int, default=400,
+                        help="Limit each class to a balanced random sample (default 400 for CPU training); 0 uses every image.")
     parser.add_argument("--weights", default="imagenet", help="Use imagenet or none; pretrained initialization is recommended.")
     parser.add_argument("--rebuild-cache", action="store_true", help="Re-extract and rebuild randomized splits.")
     args = parser.parse_args()

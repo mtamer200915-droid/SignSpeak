@@ -1,60 +1,73 @@
-# Character image data preparation
+# Signova V2 character model
 
-The supplied alphabet and digit archives have been staged into a balanced 40-label image dataset. Originals remain unchanged in their ZIP archives. The working split is local under the ignored .downloads/character-training/ folder and is not committed to Git.
+## Data preparation
 
-- Labels: 40 (A–Z, 0–9, DELETE, NOTHING, SPACE, UNKNOWN)
-- Training images: 55073
-- Validation images: 6883
-- Test images: 6883
-- Per-label sampling cap: 2000 unique images before the split
-- Duplicate handling: exact duplicate file contents were removed within each label before splitting.
-- Split method: seeded, stratified random image split (80% train, 10% validation, 10% test).
+The supplied alphabet and digit ZIP archives were sampled and cleaned locally. Raw ZIP files and prepared images remain outside Git and are not included in the public repository. Exact duplicate image files were removed within each label before the train/validation/test split. The split is seeded and stratified by label; up to 400 unique images per label were sampled.
 
-| Label | Train | Validation | Test |
-|---|---:|---:|---:|
-| 0 | 1199 | 150 | 150 |
-| 1 | 1200 | 150 | 150 |
-| 2 | 1197 | 150 | 150 |
-| 3 | 1176 | 147 | 147 |
-| 4 | 1193 | 149 | 149 |
-| 5 | 1199 | 150 | 150 |
-| 6 | 1192 | 149 | 149 |
-| 7 | 1200 | 150 | 150 |
-| 8 | 1200 | 150 | 150 |
-| 9 | 1200 | 150 | 150 |
-| A | 1464 | 183 | 183 |
-| B | 1452 | 182 | 182 |
-| C | 1457 | 182 | 182 |
-| D | 1421 | 178 | 178 |
-| E | 1435 | 179 | 179 |
-| F | 1452 | 182 | 182 |
-| G | 1442 | 180 | 180 |
-| H | 1441 | 180 | 180 |
-| I | 1447 | 181 | 181 |
-| J | 1446 | 181 | 181 |
-| K | 1438 | 180 | 180 |
-| L | 1458 | 182 | 182 |
-| M | 1427 | 178 | 178 |
-| N | 1452 | 182 | 182 |
-| O | 1459 | 182 | 182 |
-| P | 1429 | 178 | 178 |
-| Q | 1435 | 180 | 180 |
-| R | 1444 | 180 | 180 |
-| S | 1461 | 183 | 183 |
-| T | 1458 | 182 | 182 |
-| U | 1442 | 180 | 180 |
-| V | 1412 | 176 | 176 |
-| W | 1425 | 178 | 178 |
-| X | 1462 | 183 | 183 |
-| Y | 1450 | 181 | 181 |
-| Z | 1412 | 176 | 176 |
-| DELETE | 1395 | 174 | 174 |
-| NOTHING | 1600 | 200 | 200 |
-| SPACE | 1401 | 175 | 175 |
-| UNKNOWN | 1200 | 150 | 150 |
+- Labels: 40 total (A–Z, 0–9, plus DELETE, NOTHING, SPACE, UNKNOWN).
+- Training images: 12,618.
+- Validation images: 1,575.
+- Held-out test images: 1,575 (about 39–40 per label).
+- Split: 80% train, 10% validation, 10% test per label.
+- Duplicate audit: no exact cross-label duplicates and no same-class file hashes appear across splits.
 
-## Evaluation status
+## Model and evaluation
 
-No character model has been trained yet, so accuracy for the letters and numbers is **not available**. The prepared test split is image-based and is not a signer-independent or camera-video evaluation. The supplied archives have no signer/session IDs, and static images do not contain the movement needed to fully model J or Z. The ASL letter O and numeral 0 also share the same static handshape, so a single image cannot reliably determine which meaning the signer intends without context.
+The model uses ImageNet-pretrained MobileNetV2 as a frozen image feature extractor, then trains a regularized 256-unit classifier with dropout, mild image augmentation, early stopping, and learning-rate reduction. The complete image model is packaged as `api/models/signova_characters.keras`; the FastAPI service loads it alongside the existing video word model.
 
-Training has not run in the current Windows workspace. The local virtual environment contains TensorFlow packages, but its Python executable points to a Windows Store runtime that Windows denies access to, so the training process cannot start. Do not treat the current word model's 25.61% held-out video score as the character image model's accuracy.
+Held-out image Top-1 accuracy: **88.3%**. Balanced Top-1 accuracy: **88.3%**. Top-3 accuracy: **97.1%** across 1575 test images.
+
+| Label | Train | Validation | Test | Test accuracy |
+|---|---:|---:|---:|---:|
+| 0 | 320 | 40 | 40 | 97.5% |
+| 1 | 320 | 40 | 40 | 87.5% |
+| 2 | 320 | 40 | 40 | 67.5% |
+| 3 | 317 | 40 | 40 | 95.0% |
+| 4 | 319 | 40 | 40 | 87.5% |
+| 5 | 320 | 40 | 40 | 95.0% |
+| 6 | 317 | 40 | 40 | 87.5% |
+| 7 | 320 | 40 | 40 | 82.5% |
+| 8 | 320 | 40 | 40 | 80.0% |
+| 9 | 320 | 40 | 40 | 95.0% |
+| A | 315 | 40 | 40 | 87.5% |
+| B | 315 | 40 | 40 | 95.0% |
+| C | 315 | 39 | 39 | 92.3% |
+| D | 315 | 39 | 39 | 92.3% |
+| E | 315 | 39 | 39 | 74.4% |
+| F | 315 | 39 | 39 | 79.5% |
+| G | 314 | 39 | 39 | 92.3% |
+| H | 316 | 40 | 40 | 90.0% |
+| I | 315 | 39 | 39 | 79.5% |
+| J | 313 | 39 | 39 | 84.6% |
+| K | 316 | 39 | 39 | 97.4% |
+| L | 315 | 39 | 39 | 82.1% |
+| M | 317 | 40 | 40 | 82.5% |
+| N | 315 | 39 | 39 | 84.6% |
+| O | 316 | 39 | 39 | 92.3% |
+| P | 312 | 39 | 39 | 84.6% |
+| Q | 310 | 39 | 39 | 100.0% |
+| R | 310 | 39 | 39 | 89.7% |
+| S | 316 | 39 | 39 | 84.6% |
+| T | 315 | 39 | 39 | 84.6% |
+| U | 313 | 39 | 39 | 87.2% |
+| V | 308 | 38 | 38 | 84.2% |
+| W | 313 | 39 | 39 | 82.1% |
+| X | 313 | 39 | 39 | 82.1% |
+| Y | 314 | 39 | 39 | 82.1% |
+| Z | 313 | 39 | 39 | 92.3% |
+| DELETE | 308 | 39 | 39 | 100.0% |
+| NOTHING | 320 | 40 | 40 | 100.0% |
+| SPACE | 313 | 39 | 39 | 100.0% |
+| UNKNOWN | 320 | 40 | 40 | 97.5% |
+
+The weakest relevant labels in this image holdout were **2 (67.5%)**, **E (74.4%)**, and **F/I (79.5%)**. Results vary by class and should not be represented as 100% accuracy.
+
+## Limits and API behavior
+
+This is a random image holdout, not a signer-independent camera test; the archives do not provide signer/session IDs. Real camera images may score lower because of background, framing, lighting, hand size, and signer differences. Static images do not encode the movement needed to fully recognize ASL **J** and **Z**. The letter **O** and numeral **0** share a static handshape, so selecting between them needs sequence or user context.
+
+The V2 web page sends photos to character mode and videos to word mode automatically. Both models are served by the same FastAPI application and `/api/predict` endpoint. The existing word model was not retrained in this change. Its held-out video score remains separate from this image-model score.
+
+## Reproducibility
+
+Run `train_character_model.py` with the two supplied ZIP archive paths. The default training cap is 400 sampled images per label to keep CPU training practical; the split seed is 42. The detailed class metrics and confusion matrix are saved in `api/models/character_model_info.json`.

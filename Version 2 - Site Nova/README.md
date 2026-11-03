@@ -27,7 +27,7 @@ Training writes `api/models/signova_v2.keras`, `api/models/class_names.json`, `a
 
 ### Train the letters-and-numbers model
 
-The supplied image archives can be used to train a separate 40-label ASL character model (A–Z, 0–9, space, delete, nothing, and unknown). The script reads the two ZIP files directly and extracts a balanced sample of up to 2,000 unique images per label into train, validation, and test splits under the ignored `.downloads/character-training/` directory; it does not add the image archives or extracted images to Git. Expect several gigabytes of temporary disk use. Keep the word model files unchanged.
+The supplied image archives were used to train a separate 40-label ASL character model (A–Z, 0–9, space, delete, nothing, and unknown). The script reads the two ZIP files directly and extracts a balanced sample of up to 400 unique images per label into train, validation, and test splits under an ignored `.downloads/character-training-*` directory; it does not add the image archives or extracted images to Git. The latest run has 12,618 training images, 1,575 validation images, and 1,575 held-out test images. Keep the word model files unchanged.
 
 The supplied archives did not include a license/readme file. Check the original dataset pages and their redistribution terms before publishing derived data or model weights publicly.
 
@@ -35,7 +35,7 @@ The supplied archives did not include a license/readme file. Check the original 
 python train_character_model.py --alphabet-zip "G:\archive (1).zip" --digits-zip "G:\archive (2).zip"
 ```
 
-This writes `api/models/signova_characters.keras`, `api/models/character_class_names.json`, and `api/models/character_model_info.json`. Its preliminary evaluation holds out random images because the supplied archives do not identify signer/session IDs. It must not be presented as independent camera accuracy. In particular, J and Z include movement, so add real labeled video examples and evaluate on separate recording sessions before relying on those predictions.
+This writes `api/models/signova_characters.keras`, `api/models/character_class_names.json`, and `api/models/character_model_info.json`. The current held-out image accuracy is 88.3% Top-1 and 97.1% Top-3 across 1,575 images; see `CHARACTER_DATA_PREPARATION.md` for per-label scores. This preliminary evaluation holds out random images because the supplied archives do not identify signer/session IDs. It must not be presented as independent camera accuracy. In particular, J and Z include movement, so add real labeled video examples and evaluate on separate recording sessions before relying on those predictions.
 
 To recreate the sample selection from the source metadata or add local WLASL training clips, download the official MS-ASL metadata archive and extract WLASL v0.3, then run:
 
