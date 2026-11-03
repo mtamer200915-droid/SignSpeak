@@ -1,0 +1,18 @@
+{
+  "model": "Experimental static ASL digit classifier using a frozen MobileNetV2 encoder",
+  "classes": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+  "input": {"height": 224, "width": 224, "channels": 3, "color": "RGB", "value_range": "0..255"},
+  "training": {
+    "source": "User-supplied ASL number image archive",
+    "sample_count": 14146,
+    "validation_count": 400,
+    "split": "Previous validation and test image hashes were excluded from training; exact duplicate bytes were removed."
+  },
+  "test": {
+    "top1_accuracy": 0.9475,
+    "previous_character_model_digit_filtered_top1": 0.875,
+    "sample_count": 400,
+    "per_digit_accuracy": {"0": 1.0, "1": 0.95, "2": 0.975, "3": 0.975, "4": 0.95, "5": 1.0, "6": 0.85, "7": 0.825, "8": 0.95, "9": 1.0},
+    "note": "Random images from the same source, 40 per digit; not a signer-independent or mobile-camera evaluation. Results use PIL image resizing and do not guarantee API or camera performance."
+  }
+}

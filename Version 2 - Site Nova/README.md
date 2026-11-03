@@ -33,6 +33,18 @@ The supplied image archives were used to train a separate 40-label ASL character
 
 The supplied archives did not include a license/readme file. Check the original dataset pages and their redistribution terms before publishing derived data or model weights publicly.
 
+### Experimental dedicated digit model
+
+The same API can load `api/models/signova_digits.keras` for Numbers while keeping the existing image model for Letters and the video model for Words. If the optional digit bundle is absent or invalid, Numbers fall back to the previous character model. `/health` reports `available_modes.numbers.dedicated_model_loaded` separately.
+
+The candidate used 14,146 deduplicated number images. The 400 validation and 400 test images from the earlier prepared split were excluded by exact file hash. On those same-source test images the candidate scored 94.75% top-1, versus 87.5% for the old character model restricted to digits. These are random images from the same source and use PIL resizing; this is not an independent signer or phone-camera result, and near-duplicate images can remain across splits.
+
+To reproduce the experiment locally, retain the earlier prepared `val/<digit>` and `test/<digit>` images and run the following with the original archive. The output is a separate candidate; it does not overwrite deployed weights:
+
+```powershell
+python train_digit_model.py --digits-zip "G:\archive (2).zip" --heldout-cache ".downloads\character-training-20261103-011526" --output ".downloads\digit-candidate-local"
+```
+
 ```powershell
 python train_character_model.py --alphabet-zip "G:\archive (1).zip" --digits-zip "G:\archive (2).zip"
 ```
