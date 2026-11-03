@@ -22,6 +22,8 @@ CHAR_CLASS_PATH = ROOT / "models" / "character_class_names.json"
 CHAR_INFO_PATH = ROOT / "models" / "character_model_info.json"
 DIGIT_MODEL_PATH = ROOT / "models" / "signova_digits.keras"
 DIGIT_INFO_PATH = ROOT / "models" / "digit_model_info.json"
+LETTER_MODEL_PATH = ROOT / "models" / "signova_letters.keras"
+LETTER_INFO_PATH = ROOT / "models" / "letter_model_info.json"
 SIZE = 224
 FRAME_COUNT = 12
 SAMPLE_FPS = 8
@@ -42,6 +44,8 @@ _character_info: dict = {}
 _character_classes: list[str] = []
 _digit_model = None
 _digit_info: dict = {}
+_letter_model = None
+_letter_info: dict = {}
 _ffmpeg = None
 
 
@@ -58,8 +62,9 @@ def get_ffmpeg() -> str:
 
 
 def load_bundle() -> None:
-    global _model, _info, _character_model, _character_info, _character_classes, _digit_model, _digit_info
+    global _model, _info, _character_model, _character_info, _character_classes, _digit_model, _digit_info, _letter_model, _letter_info
     _digit_model, _digit_info = None, {}
+    _letter_model, _letter_info = None, {}
     if not MODEL_PATH.is_file() or not INFO_PATH.is_file():
         raise RuntimeError("Signova V2 model files are missing. Run the training workflow first.")
     _info = json.loads(INFO_PATH.read_text(encoding="utf-8"))
@@ -107,6 +112,20 @@ def load_bundle() -> None:
             _digit_info, _digit_model = digit_info, digit_model
         except Exception as exc:
             print(f"Specialized digit model unavailable; using character fallback: {exc}", flush=True)
+
+    if LETTER_MODEL_PATH.exists() or LETTER_INFO_PATH.exists():
+        try:
+            if not LETTER_MODEL_PATH.is_file() or not LETTER_INFO_PATH.is_file():
+                raise RuntimeError("Letter model bundle is incomplete.")
+            letter_info = json.loads(LETTER_INFO_PATH.read_text(encoding="utf-8"))
+            if letter_info.get("classes") != list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
+                raise RuntimeError("Letter model class order is invalid.")
+            letter_model = tf.keras.models.load_model(LETTER_MODEL_PATH, compile=False)
+            if tuple(letter_model.input_shape[1:]) != (SIZE, SIZE, 3) or letter_model.output_shape[-1] != 26:
+                raise RuntimeError("Letter model dimensions are invalid.")
+            _letter_info, _letter_model = letter_info, letter_model
+        except Exception as exc:
+            print(f"Specialized letter model unavailable; using character fallback: {exc}", flush=True)
 
 
 @app.on_event("startup")
@@ -166,8 +185,12 @@ def health() -> dict:
         "available_modes": {
             "words": {"model_loaded": True, "classes": _info.get("classes", [])},
             "letters": {
-                "model_loaded": _character_model is not None,
-                "classes": [label for label in _character_classes if len(label) == 1 and label.isalpha()],
+                "model_loaded": _letter_model is not None or _character_model is not None,
+                "dedicated_model_loaded": _letter_model is not None,
+                "classes": list("ABCDEFGHIJKLMNOPQRSTUVWXYZ") if _letter_model is not None else [label for label in _character_classes if len(label) == 1 and label.isalpha()],
+                "test_accuracy": _letter_info.get("test", {}).get("top1_accuracy"),
+                "test_sample_count": _letter_info.get("test", {}).get("sample_count"),
+                "test_note": _letter_info.get("test", {}).get("note"),
             },
             "numbers": {
                 "model_loaded": _digit_model is not None or _character_model is not None,
@@ -207,7 +230,8 @@ async def predict(
     if mode == "words" and character_kind != "all":
         raise HTTPException(status_code=400, detail="Character type filters can only be used with the character model.")
     use_digit_model = mode == "characters" and character_kind == "numbers" and _digit_model is not None
-    if mode == "characters" and _character_model is None and not use_digit_model:
+    use_letter_model = mode == "characters" and character_kind == "letters" and _letter_model is not None
+    if mode == "characters" and _character_model is None and not (use_digit_model or use_letter_model):
         raise HTTPException(status_code=503, detail="The letters and numbers model is not trained or installed yet.")
     payload = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(payload) > MAX_UPLOAD_BYTES:
@@ -229,7 +253,7 @@ async def predict(
             character_input = tf.cast(image, tf.float32)[None, ...]
         except Exception as exc:
             raise HTTPException(status_code=422, detail="The image could not be decoded. Use a clear JPG or PNG photo.") from exc
-        image_model = _digit_model if use_digit_model else _character_model
+        image_model = _digit_model if use_digit_model else (_letter_model if use_letter_model else _character_model)
         probabilities = image_model.predict(character_input, verbose=0)[0]
         input_type = "image"
     else:
@@ -248,7 +272,7 @@ async def predict(
 
         if mode == "characters":
             # Average per-frame static-handshape scores for character videos.
-            image_model = _digit_model if use_digit_model else _character_model
+            image_model = _digit_model if use_digit_model else (_letter_model if use_letter_model else _character_model)
             frame_probabilities = image_model.predict(frames, batch_size=FRAME_COUNT, verbose=0)
             probabilities = frame_probabilities.mean(axis=0)
         else:
@@ -258,6 +282,9 @@ async def predict(
 
     if use_digit_model:
         classes = list("0123456789")
+        candidate_scores = probabilities
+    elif use_letter_model:
+        classes = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
         candidate_scores = probabilities
     elif mode == "characters":
         available_classes = _character_classes
@@ -284,9 +311,9 @@ async def predict(
         "word": best["word"],
         "confidence": best["score"],
         "suggestions": suggestions,
-        "prediction_source": "signova_v2_digit_model" if use_digit_model else ("signova_v2_character_model" if mode == "characters" else "signova_v2_local_model"),
+        "prediction_source": "signova_v2_digit_model" if use_digit_model else ("signova_v2_letter_model" if use_letter_model else ("signova_v2_character_model" if mode == "characters" else "signova_v2_local_model")),
         "pose_coverage": None,
-        "model_version": "digits-v1" if use_digit_model else ("characters-v1" if mode == "characters" else "v2"),
+        "model_version": "digits-v1" if use_digit_model else ("letters-v1" if use_letter_model else ("characters-v1" if mode == "characters" else "v2")),
         "prediction_mode": mode,
         "character_kind": character_kind if mode == "characters" else None,
         "input_type": input_type,

@@ -221,7 +221,7 @@
       setText(versionLabel, `Signova V${release.version}`);
       setText(buildLabel, String(release.build || currentBuild || "local").slice(0, 7));
     } catch {
-      setText(versionLabel, "Signova V2.3.9");
+      setText(versionLabel, "Signova V2.4.0");
       setText(buildLabel, String(currentBuild || "local").slice(0, 7));
     }
   }
@@ -370,17 +370,26 @@
         }
         const characterMode = health.available_modes?.characters;
         state.characterModelAvailable = Boolean(characterMode?.model_loaded);
+        const digitMode = health.available_modes?.numbers;
+        const letterMode = health.available_modes?.letters;
         const characterSummary = $("#characterModelAccuracy");
         if (characterSummary) {
-          if (characterMode?.model_loaded && Number.isFinite(Number(characterMode.test_accuracy))) {
-            const percent = (Number(characterMode.test_accuracy) * 100).toFixed(1);
-            const samples = Number(characterMode.test_clip_count);
+          const result = digitMode?.dedicated_model_loaded ? digitMode : characterMode;
+          if (result?.model_loaded && result.test_accuracy != null && Number.isFinite(Number(result.test_accuracy))) {
+            const percent = (Number(result.test_accuracy) * 100).toFixed(1);
+            const samples = Number(result.test_sample_count ?? result.test_clip_count);
             setEnglishText(characterSummary, Number.isFinite(samples)
-              ? "Image test accuracy: {percent}% across {samples} held-out photos. Camera results can differ."
+              ? "Image test accuracy: {percent}% across {samples} same-source photos. Camera results can differ."
               : "Image test accuracy: {percent}%. Camera results can differ.", { percent, samples });
           } else {
             setEnglishText(characterSummary, "Letters and numbers model is not trained or connected yet.");
           }
+        }
+        const letterSummary = $("#letterModelAccuracy");
+        if (letterSummary && letterMode?.dedicated_model_loaded && letterMode.test_accuracy != null) {
+          setEnglishText(letterSummary, "Image test accuracy: {percent}% across {samples} same-source photos. Camera results can differ.", {
+            percent: (Number(letterMode.test_accuracy) * 100).toFixed(1), samples: Number(letterMode.test_sample_count)
+          });
         }
         updateDemoExpiryFromHealth(health);
         const testAccuracy = health.test_accuracy == null ? NaN : Number(health.test_accuracy);

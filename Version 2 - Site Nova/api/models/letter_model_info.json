@@ -1,0 +1,181 @@
+{
+  "model": "Experimental static ASL letter classifier using frozen MobileNetV2",
+  "classes": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z"
+  ],
+  "input": {
+    "height": 224,
+    "width": 224,
+    "channels": 3,
+    "color": "RGB",
+    "value_range": "0..255"
+  },
+  "training": {
+    "samples_per_letter": 600,
+    "source": "User-supplied ASL alphabet archive",
+    "split": "Exact hashes in prior validation and test images excluded from training."
+  },
+  "test": {
+    "top1_accuracy": 0.9577187807276303,
+    "previous_letter_filtered_top1": 0.8711897738446411,
+    "sample_count": 1017,
+    "per_letter": {
+      "A": {
+        "count": 40,
+        "old_accuracy": 0.875,
+        "candidate_accuracy": 0.925
+      },
+      "B": {
+        "count": 40,
+        "old_accuracy": 0.95,
+        "candidate_accuracy": 0.95
+      },
+      "C": {
+        "count": 39,
+        "old_accuracy": 0.9230769230769231,
+        "candidate_accuracy": 1.0
+      },
+      "D": {
+        "count": 39,
+        "old_accuracy": 0.9230769230769231,
+        "candidate_accuracy": 0.9743589743589743
+      },
+      "E": {
+        "count": 39,
+        "old_accuracy": 0.7435897435897436,
+        "candidate_accuracy": 0.9487179487179487
+      },
+      "F": {
+        "count": 39,
+        "old_accuracy": 0.7948717948717948,
+        "candidate_accuracy": 0.9487179487179487
+      },
+      "G": {
+        "count": 39,
+        "old_accuracy": 0.9230769230769231,
+        "candidate_accuracy": 0.9487179487179487
+      },
+      "H": {
+        "count": 40,
+        "old_accuracy": 0.9,
+        "candidate_accuracy": 0.975
+      },
+      "I": {
+        "count": 39,
+        "old_accuracy": 0.7948717948717948,
+        "candidate_accuracy": 0.9230769230769231
+      },
+      "J": {
+        "count": 39,
+        "old_accuracy": 0.8461538461538461,
+        "candidate_accuracy": 0.9743589743589743
+      },
+      "K": {
+        "count": 39,
+        "old_accuracy": 0.9743589743589743,
+        "candidate_accuracy": 1.0
+      },
+      "L": {
+        "count": 39,
+        "old_accuracy": 0.8205128205128205,
+        "candidate_accuracy": 1.0
+      },
+      "M": {
+        "count": 40,
+        "old_accuracy": 0.85,
+        "candidate_accuracy": 0.925
+      },
+      "N": {
+        "count": 39,
+        "old_accuracy": 0.8461538461538461,
+        "candidate_accuracy": 0.8974358974358975
+      },
+      "O": {
+        "count": 39,
+        "old_accuracy": 0.9230769230769231,
+        "candidate_accuracy": 1.0
+      },
+      "P": {
+        "count": 39,
+        "old_accuracy": 0.8717948717948718,
+        "candidate_accuracy": 0.9487179487179487
+      },
+      "Q": {
+        "count": 39,
+        "old_accuracy": 1.0,
+        "candidate_accuracy": 1.0
+      },
+      "R": {
+        "count": 39,
+        "old_accuracy": 0.8974358974358975,
+        "candidate_accuracy": 0.9743589743589743
+      },
+      "S": {
+        "count": 39,
+        "old_accuracy": 0.8461538461538461,
+        "candidate_accuracy": 0.8974358974358975
+      },
+      "T": {
+        "count": 39,
+        "old_accuracy": 0.8461538461538461,
+        "candidate_accuracy": 0.9487179487179487
+      },
+      "U": {
+        "count": 39,
+        "old_accuracy": 0.8717948717948718,
+        "candidate_accuracy": 0.9230769230769231
+      },
+      "V": {
+        "count": 38,
+        "old_accuracy": 0.8421052631578947,
+        "candidate_accuracy": 0.9736842105263158
+      },
+      "W": {
+        "count": 39,
+        "old_accuracy": 0.8205128205128205,
+        "candidate_accuracy": 1.0
+      },
+      "X": {
+        "count": 39,
+        "old_accuracy": 0.8205128205128205,
+        "candidate_accuracy": 0.9230769230769231
+      },
+      "Y": {
+        "count": 39,
+        "old_accuracy": 0.8205128205128205,
+        "candidate_accuracy": 0.9743589743589743
+      },
+      "Z": {
+        "count": 39,
+        "old_accuracy": 0.9230769230769231,
+        "candidate_accuracy": 0.9487179487179487
+      }
+    },
+    "note": "Random images from same source; not independent signer or mobile-camera accuracy. J and Z require motion."
+  }
+}

@@ -44,6 +44,8 @@ jobs:
             Version 2 - Site Nova/api/models/character_model_info.json
             Version 2 - Site Nova/api/models/signova_digits.keras
             Version 2 - Site Nova/api/models/digit_model_info.json
+            Version 2 - Site Nova/api/models/signova_letters.keras
+            Version 2 - Site Nova/api/models/letter_model_info.json
           sparse-checkout-cone-mode: false
 
       - name: Set up Python
@@ -111,6 +113,7 @@ jobs:
           assert words.get("model_loaded") is True and len(words.get("classes", [])) == 20, "The 20-class word model did not load."
           assert characters.get("model_loaded") is True, "The letters-and-numbers model did not load."
           assert modes.get("numbers", {}).get("dedicated_model_loaded") is True, "The dedicated digit model did not load."
+          assert modes.get("letters", {}).get("dedicated_model_loaded") is True, "The dedicated letter model did not load."
           assert set(characters.get("classes", [])) == expected_characters, "The character model labels do not match the expected 40 classes."
           print("Both Signova V2 models loaded: 20 word classes and 40 character classes.")
           print(f"Word held-out Top-1 accuracy: {health.get('test_accuracy')}")
@@ -178,6 +181,7 @@ jobs:
           assert result.get("word") in classes
           assert result.get("prediction_mode") == "characters"
           assert letter_result.get("character_kind") == "letters"
+          assert letter_result.get("prediction_source") == "signova_v2_letter_model"
           assert all(item["word"].isalpha() and len(item["word"]) == 1 for item in letter_result["suggestions"])
           assert number_result.get("character_kind") == "numbers"
           assert number_result.get("prediction_source") == "signova_v2_digit_model"
