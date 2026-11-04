@@ -221,7 +221,7 @@
       setText(versionLabel, `Signova V${release.version}`);
       setText(buildLabel, String(release.build || currentBuild || "local").slice(0, 7));
     } catch {
-      setText(versionLabel, "Signova V2.4.1");
+      setText(versionLabel, "Signova V2.4.2");
       setText(buildLabel, String(currentBuild || "local").slice(0, 7));
     }
   }
@@ -473,16 +473,80 @@
     }, { once: true });
   }
 
-  async function getCameraStream(facingMode) {
+  async function getCameraStream(facingMode, deviceId = null) {
+    const video = {
+      // Prefer a clearer preview without excluding cameras that only support
+      // smaller resolutions. Models still perform their own preprocessing.
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 24 }
+    };
+    if (deviceId) video.deviceId = { exact: deviceId };
+    else video.facingMode = { ideal: facingMode };
     return navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: 640, max: 640 },
-        height: { ideal: 480, max: 480 },
-        frameRate: { ideal: 24, max: 30 },
-        facingMode: { ideal: facingMode }
-      },
+      video,
       audio: false
     });
+  }
+
+  async function getPreferredIntegratedCameraId() {
+    if (typeof navigator.mediaDevices.enumerateDevices !== "function") return null;
+    let timeoutId;
+    try {
+      // Some browsers delay device enumeration until the document is visible.
+      // Don't let that prevent the ordinary camera request from proceeding.
+      const devices = await Promise.race([
+        navigator.mediaDevices.enumerateDevices(),
+        new Promise(resolve => { timeoutId = setTimeout(() => resolve(null), 1500); })
+      ]);
+      if (!devices) return null;
+      // Desktop browsers expose names only after camera permission is granted.
+      // Don't treat ordinary front/back phone cameras as integrated webcams.
+      const integrated = devices.find(device => device.kind === "videoinput"
+        && device.deviceId
+        && /\b(integrated|built[ -]?in|internal|facetime)\b/i.test(device.label));
+      return integrated?.deviceId || null;
+    } catch (error) {
+      console.warn("Could not inspect available cameras:", error);
+      return null;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  async function getInitialCameraStream() {
+    const preferredId = await getPreferredIntegratedCameraId();
+    let preferredUnavailable = false;
+    if (preferredId) {
+      try {
+        return await getCameraStream("user", preferredId);
+      } catch (error) {
+        preferredUnavailable = true;
+        console.warn("Integrated camera unavailable; trying the default camera:", error);
+      }
+    }
+
+    const initialStream = await getCameraStream("user");
+    // On a first visit device names can become available only after this first
+    // stream grants permission. Try the integrated webcam once more, keeping
+    // the original stream alive if the preferred device is busy or missing.
+    const revealedId = await getPreferredIntegratedCameraId();
+    const initialId = initialStream.getVideoTracks()[0]?.getSettings?.().deviceId;
+    if (!revealedId || revealedId === initialId) {
+      if (preferredUnavailable && initialId !== preferredId) {
+        toast("Laptop camera unavailable. Using another camera; close other camera apps and try again.");
+      }
+      return initialStream;
+    }
+    try {
+      const preferredStream = await getCameraStream("user", revealedId);
+      initialStream.getTracks().forEach(track => track.stop());
+      return preferredStream;
+    } catch (error) {
+      console.warn("Integrated camera unavailable; keeping the current camera:", error);
+      toast("Laptop camera unavailable. Using another camera; close other camera apps and try again.");
+      return initialStream;
+    }
   }
 
   function setFramingState(stateName, title, message, ready = false) {
@@ -662,7 +726,7 @@
     }
     try {
       state.cameraFacingMode = "user";
-      state.stream = await getCameraStream(state.cameraFacingMode);
+      state.stream = await getInitialCameraStream();
       watchCameraTrack(state.stream);
       elements.cameraVideo.srcObject = state.stream;
       await elements.cameraVideo.play();
@@ -808,6 +872,7 @@
   async function flipCamera() {
     if (!state.stream || state.isAnalyzing || state.currentPrediction || (mediaRecorder && mediaRecorder.state === "recording")) return;
     const previousFacing = state.cameraFacingMode;
+    const previousDeviceId = state.stream.getVideoTracks()[0]?.getSettings?.().deviceId || null;
     const nextFacing = previousFacing === "user" ? "environment" : "user";
     elements.flipCamera.disabled = true;
     elements.startSign.disabled = true;
@@ -844,7 +909,12 @@
       state.stream = null;
       elements.cameraVideo.srcObject = null;
       try {
-        state.stream = await getCameraStream(previousFacing);
+        try {
+          state.stream = await getCameraStream(previousFacing, previousDeviceId);
+        } catch (restoreError) {
+          if (!previousDeviceId) throw restoreError;
+          state.stream = await getCameraStream(previousFacing);
+        }
         watchCameraTrack(state.stream);
         state.cameraFacingMode = previousFacing;
         elements.cameraVideo.srcObject = state.stream;
